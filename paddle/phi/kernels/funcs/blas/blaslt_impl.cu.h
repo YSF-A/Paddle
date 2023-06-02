@@ -182,6 +182,8 @@ template <typename T>
 cublasComputeType_t GetCudaComputeType() {
   if (std::is_same<T, double>::value) {
     return CUBLAS_COMPUTE_64F;
+  } else if (std::is_same<T, int8_t>::value) {
+    return CUBLAS_COMPUTE_32I;
   } else {
     return CUBLAS_COMPUTE_32F;
   }

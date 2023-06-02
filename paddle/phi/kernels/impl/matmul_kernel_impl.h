@@ -987,6 +987,72 @@ void MatmulKernel(const Context& ctx,
       ctx, x, y, x_dims, y_dims, out, transpose_x, transpose_y);
 }
 
+template <typename Context, typename T>
+struct MatmulWithFlattenFunction {
+  void operator()(const Context& dev_ctx,
+                  const DenseTensor& x_matrix,
+                  const DenseTensor& y_matrix,
+                  DenseTensor* out) {
+    dev_ctx.template Alloc<T>(out);
+    auto z_dim = out->dims();
+    if (z_dim.size() != 2) {
+      out->Resize({x_matrix.dims()[0], y_matrix.dims()[1]});
+    }
+    auto blas = phi::funcs::GetBlas<phi::GPUContext, T>(dev_ctx);
+
+    blas.MatMul(x_matrix, y_matrix, out);
+    if (z_dim.size() != 2) {
+      out->Resize(z_dim);
+    }
+  }
+};
+
+#ifdef PADDLE_WITH_CUDA
+template <typename T>
+struct MatmulWithFlattenFunction<phi::GPUContext, T> {
+  void operator()(const phi::GPUContext& dev_ctx,
+                  const DenseTensor& x_matrix,
+                  const DenseTensor& y_matrix,
+                  DenseTensor* out) {
+    dev_ctx.template Alloc<T>(out);
+    auto z_dim = out->dims();
+    if (z_dim.size() != 2) {
+      out->Resize({x_matrix.dims()[0], y_matrix.dims()[1]});
+    }
+#if CUDA_VERSION >= 11060
+    PADDLE_ENFORCE_EQ(
+      x_matrix.place() == y_matrix.place() && x_matrix.place() == out->place(),
+      true,
+      phi::errors::InvalidArgument("The places of matrices in the matmul_with_flatten "
+                                    "should be same, please check your "
+                                    "code."));
+
+    const T* x_data = x_matrix.data<T>();
+    const T* y_data = y_matrix.data<T>();
+    
+    using blaslt = phi::funcs::MatmulWithCublasLt<T>;
+    // todo: add AutoTune
+    blaslt::Run(dev_ctx,
+                y_data,
+                x_data,
+                out,
+                x_matrix.dims()[0],
+                y_matrix.dims()[1],
+                x_matrix.dims()[1],
+                false,
+                false);
+#else
+      auto blas = phi::funcs::GetBlas<phi::GPUContext, T>(dev_ctx);
+
+      blas.MatMul(x_matrix, y_matrix, out);
+#endif
+    if (z_dim.size() != 2) {
+      out->Resize(z_dim);
+    }
+  }
+};
+#endif  // PADDLE_WITH_CUDA
+
 template <typename T, typename Context>
 void MatmulWithFlattenKernel(const Context& dev_ctx,
                              const DenseTensor& x,
@@ -998,19 +1064,7 @@ void MatmulWithFlattenKernel(const Context& dev_ctx,
       x.dims().size() > 2 ? phi::ReshapeToMatrix(x, x_num_col_dims) : x;
   const DenseTensor y_matrix =
       y.dims().size() > 2 ? phi::ReshapeToMatrix(y, y_num_col_dims) : y;
-
-  dev_ctx.template Alloc<T>(out);
-  auto z_dim = out->dims();
-  if (z_dim.size() != 2) {
-    out->Resize({x_matrix.dims()[0], y_matrix.dims()[1]});
-  }
-
-  auto blas = phi::funcs::GetBlas<Context, T>(dev_ctx);
-
-  blas.MatMul(x_matrix, y_matrix, out);
-  if (z_dim.size() != 2) {
-    out->Resize(z_dim);
-  }
+  MatmulWithFlattenFunction<Context, T>()(dev_ctx, x_matrix, y_matrix, out);
 }
 
 }  // namespace phi
