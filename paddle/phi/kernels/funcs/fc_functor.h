@@ -36,5 +36,25 @@ class FCFunctor {
                   bool weight_pass = false);
 };
 
+template <typename DeviceContext, typename T>
+class FCInt8Functor {
+ public:
+  void operator()(const DeviceContext& context,
+                  const int M,
+                  const int N,
+                  const int K,
+                  const T* X,
+                  const int_8* W,
+                  T* Y,
+                  const T* B = nullptr,
+                  bool relu = false,
+                  bool weight_pass = false,
+                  float scale_in,
+                  std::vector<float> scale_weights,
+                  int quant_round_type,
+                  float quant_max_bound,
+                  float quant_min_bound);
+};
+
 }  // namespace funcs
 }  // namespace phi
