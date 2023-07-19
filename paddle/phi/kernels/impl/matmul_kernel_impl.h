@@ -892,6 +892,412 @@ void MatMulFunctionImplWithCublasLt(
 }
 #endif
 
+#if defined(PADDLE_WITH_CUDA) && CUDA_VERSION >= 11060
+// This is almost a copy from MatMulFunctionImplWithCublasLt
+template <typename Context, typename T>
+void MatMulInt8FunctionImplWithCublasLt(
+    const Context& dev_ctx,
+    const DenseTensor& X,
+    const DenseTensor& Y,
+    const std::vector<std::int64_t>& x_dims,
+    const std::vector<std::int64_t>& y_dims,
+    DenseTensor* Out,
+    bool trans_x,
+    bool trans_y,
+    bool flag = false,
+    phi::funcs::MatmulPlanner* matmul_planner = nullptr) {
+  const int x_ndim = x_dims.size();
+  const int y_ndim = y_dims.size();
+  const T* x_data = X.data<T>();
+  const T* y_data = Y.data<T>();
+  using blaslt = phi::funcs::MatmulWithCublasLt<T>;
+
+  if (x_ndim == 1 && y_ndim == 1) {
+    const int M = X.numel();
+    const int N = Y.numel();
+    PADDLE_ENFORCE_EQ(
+        M,
+        N,
+        phi::errors::InvalidArgument(
+            "X's numbers must be equal to Y's numbers,"
+            "when X/Y's dims =1. But received X has [%d] elements,"
+            "received Y has [%d] elements",
+            M,
+            N));
+
+    // MatMul's case 0  =>  vector * vector
+    Out->Resize(phi::make_ddim({}));
+    dev_ctx.template Alloc<T>(Out);
+    VLOG(3) << "MatMul with blaslt case 1";
+    blaslt::Run(dev_ctx,
+                y_data,
+                x_data,
+                dev_ctx.template Alloc<T>(Out),
+                1,
+                1,
+                M,
+                false,
+                true,
+                matmul_planner);
+    return;
+  }
+
+  if (x_ndim == 1) {
+    const int N = X.numel();
+    if (trans_y) {
+      PADDLE_ENFORCE_EQ(
+          y_dims[y_ndim - 1],
+          N,
+          phi::errors::InvalidArgument("Input(Y) has error dim."
+                                       "Y'dims[%d] must be equal to %d"
+                                       "But received Y'dims[%d] is %d",
+                                       y_ndim - 1,
+                                       N,
+                                       y_ndim - 1,
+                                       y_dims[y_ndim - 1]));
+    } else {
+      PADDLE_ENFORCE_EQ(
+          y_dims[y_ndim - 2],
+          N,
+          phi::errors::InvalidArgument("Input(Y) has error dim."
+                                       "Y'dims[%d] must be equal to %d"
+                                       "But received Y'dims[%d] is %d",
+                                       y_ndim - 2,
+                                       N,
+                                       y_ndim - 2,
+                                       y_dims[y_ndim - 2]));
+    }
+    std::vector<std::int64_t> out_dims(y_ndim - 1);
+    if (trans_y) {
+      std::copy_n(y_dims.cbegin(), y_ndim - 1, out_dims.begin());
+    } else {
+      std::copy_n(y_dims.cbegin(), y_ndim - 2, out_dims.begin());
+      out_dims.back() = y_dims.back();
+    }
+    Out->ResizeAndAllocate(phi::make_ddim(out_dims));
+    dev_ctx.template Alloc<T>(Out);
+    if (trans_y) {
+      const int M = Y.numel() / N;
+      VLOG(3) << "MatMul with blaslt 2";
+      blaslt::Run(dev_ctx,
+                  y_data,
+                  x_data,
+                  dev_ctx.template Alloc<T>(Out),
+                  M,
+                  1,
+                  N,
+                  false,
+                  false,
+                  matmul_planner);
+    } else {
+      const int M = y_dims[y_ndim - 1];
+      const int batch_size = Y.numel() / (M * N);
+      if (batch_size == 1) {
+        VLOG(3) << "MatMul with blaslt 3";
+        blaslt::Run(dev_ctx,
+                    y_data,
+                    x_data,
+                    dev_ctx.template Alloc<T>(Out),
+                    M,
+                    1,
+                    N,
+                    true,
+                    false,
+                    matmul_planner);
+      } else {
+        VLOG(3) << "MatMul with blaslt 4";
+        blaslt::RunWithBatch(dev_ctx,
+                             y_data,
+                             x_data,
+                             dev_ctx.template Alloc<T>(Out),
+                             M,
+                             1,
+                             N,
+                             true,
+                             false,
+                             batch_size,
+                             M * N,
+                             0,
+                             M,
+                             matmul_planner);
+      }
+    }
+    return;
+  }
+
+  if (y_ndim == 1) {
+    const int N = Y.numel();
+    if (trans_x) {
+      PADDLE_ENFORCE_EQ(
+          x_dims[x_ndim - 2],
+          N,
+          phi::errors::InvalidArgument("Input(X) has error dim."
+                                       "X'dims[%d] must be equal to %d"
+                                       "But received X'dims[%d] is %d",
+                                       x_ndim - 2,
+                                       N,
+                                       x_ndim - 2,
+                                       x_dims[x_ndim - 2]));
+    } else {
+      PADDLE_ENFORCE_EQ(
+          x_dims[x_ndim - 1],
+          N,
+          phi::errors::InvalidArgument("Input(X) has error dim."
+                                       "X'dims[%d] must be equal to %d"
+                                       "But received X'dims[%d] is %d",
+                                       x_ndim - 1,
+                                       N,
+                                       x_ndim - 1,
+                                       x_dims[x_ndim - 1]));
+    }
+    std::vector<std::int64_t> out_dims(x_ndim - 1);
+    if (trans_x) {
+      std::copy_n(x_dims.cbegin(), x_ndim - 2, out_dims.begin());
+      out_dims.back() = x_dims.back();
+    } else {
+      std::copy_n(x_dims.cbegin(), x_ndim - 1, out_dims.begin());
+    }
+    Out->ResizeAndAllocate(phi::make_ddim(out_dims));
+    dev_ctx.template Alloc<T>(Out);
+
+    if (trans_x) {
+      const int M = x_dims[x_ndim - 1];
+      const int batch_size = X.numel() / (M * N);
+      if (batch_size == 1) {
+        VLOG(3) << "MatMul with blaslt 5";
+        blaslt::Run(dev_ctx,
+                    x_data,
+                    y_data,
+                    dev_ctx.template Alloc<T>(Out),
+                    M,
+                    1,
+                    N,
+                    true,
+                    false,
+                    matmul_planner);
+      } else {
+        VLOG(3) << "MatMul with blaslt 6";
+        blaslt::RunWithBatch(dev_ctx,
+                             x_data,
+                             y_data,
+                             dev_ctx.template Alloc<T>(Out),
+                             M,
+                             1,
+                             N,
+                             true,
+                             false,
+                             batch_size,
+                             M * N,
+                             0,
+                             M,
+                             matmul_planner);
+      }
+    } else {
+      const int M = X.numel() / N;
+      VLOG(3) << "MatMul with blaslt 7";
+      blaslt::Run(dev_ctx,
+                  x_data,
+                  y_data,
+                  dev_ctx.template Alloc<T>(Out),
+                  M,
+                  1,
+                  N,
+                  false,
+                  false,
+                  matmul_planner);
+    }
+    return;
+  }
+
+  const int M = trans_x ? x_dims[x_ndim - 1] : x_dims[x_ndim - 2];
+  const int K = trans_x ? x_dims[x_ndim - 2] : x_dims[x_ndim - 1];
+  if (trans_y) {
+    PADDLE_ENFORCE_EQ(
+        y_dims[y_ndim - 1],
+        K,
+        phi::errors::InvalidArgument("Input(Y) has error dim."
+                                     "Y'dims[%d] must be equal to %d"
+                                     "But received Y'dims[%d] is %d",
+                                     y_ndim - 1,
+                                     K,
+                                     y_ndim - 1,
+                                     y_dims[y_ndim - 1]));
+  } else {
+    PADDLE_ENFORCE_EQ(
+        y_dims[y_ndim - 2],
+        K,
+        phi::errors::InvalidArgument("Input(Y) has error dim."
+                                     "Y'dims[%d] must be equal to %d"
+                                     "But received Y'dims[%d] is %d",
+                                     y_ndim - 2,
+                                     K,
+                                     y_ndim - 2,
+                                     y_dims[y_ndim - 2]));
+  }
+  const int N = trans_y ? y_dims[y_ndim - 2] : y_dims[y_ndim - 1];
+  const int ndim = (std::max)(x_ndim, y_ndim);
+  std::vector<std::int64_t> x_broadcast_dims(ndim);
+  std::vector<std::int64_t> y_broadcast_dims(ndim);
+  std::vector<std::int64_t> out_broadcast_dims(ndim);
+
+  GetBroadcastFromDims(x_ndim - 2,
+                       x_dims.data(),
+                       y_ndim - 2,
+                       y_dims.data(),
+                       x_broadcast_dims.data(),
+                       y_broadcast_dims.data(),
+                       out_broadcast_dims.data());
+  out_broadcast_dims[ndim - 2] = M;
+  out_broadcast_dims[ndim - 1] = N;
+
+  Out->ResizeAndAllocate(phi::make_ddim(out_broadcast_dims));
+  dev_ctx.template Alloc<T>(Out);
+
+  const int batch_dim = ndim - 2;
+  // broadcast message
+  const bool is_broadcast_dims =
+      !std::equal(x_broadcast_dims.cbegin(),
+                  x_broadcast_dims.cbegin() + batch_dim,
+                  y_broadcast_dims.cbegin());
+
+  const std::int64_t x_batch_size =
+      std::accumulate(x_broadcast_dims.cbegin(),
+                      x_broadcast_dims.cbegin() + batch_dim,
+                      1LL,
+                      std::multiplies<std::int64_t>());
+  const std::int64_t y_batch_size =
+      std::accumulate(y_broadcast_dims.cbegin(),
+                      y_broadcast_dims.cbegin() + batch_dim,
+                      1LL,
+                      std::multiplies<std::int64_t>());
+  const std::int64_t out_batch_size =
+      std::accumulate(out_broadcast_dims.cbegin(),
+                      out_broadcast_dims.cbegin() + batch_dim,
+                      1LL,
+                      std::multiplies<std::int64_t>());
+  if (out_batch_size == 0) return;
+  if (x_batch_size == 1 && y_batch_size == 1) {
+    VLOG(3) << "MatMul with blaslt 8";
+    blaslt::Run(dev_ctx,
+                x_data,
+                y_data,
+                dev_ctx.template Alloc<T>(Out),
+                M,
+                N,
+                K,
+                trans_x,
+                trans_y,
+                matmul_planner);
+  } else if (x_batch_size == 1) {
+    if (M == 1 && trans_y) {
+      VLOG(3) << "MatMul with blaslt 9";
+      blaslt::Run(dev_ctx,
+                  y_data,
+                  x_data,
+                  dev_ctx.template Alloc<T>(Out),
+                  y_batch_size * N,
+                  1,
+                  K,
+                  false,
+                  false,
+                  matmul_planner);
+    } else {
+      VLOG(3) << "MatMul with blaslt 10";
+      blaslt::RunWithBatch(dev_ctx,
+                           x_data,
+                           y_data,
+                           dev_ctx.template Alloc<T>(Out),
+                           M,
+                           N,
+                           K,
+                           trans_x,
+                           trans_y,
+                           out_batch_size,
+                           0,
+                           K * N,
+                           M * N,
+                           matmul_planner);
+    }
+  } else if (y_batch_size == 1) {
+    if (!trans_x) {
+      VLOG(3) << "MatMul with blaslt 11";
+      blaslt::Run(dev_ctx,
+                  x_data,
+                  y_data,
+                  dev_ctx.template Alloc<T>(Out),
+                  x_batch_size * M,
+                  N,
+                  K,
+                  false,
+                  trans_y,
+                  matmul_planner);
+    } else {
+      VLOG(3) << "MatMul with blaslt 12";
+      blaslt::RunWithBatch(dev_ctx,
+                           x_data,
+                           y_data,
+                           dev_ctx.template Alloc<T>(Out),
+                           M,
+                           N,
+                           K,
+                           true,
+                           trans_y,
+                           out_batch_size,
+                           M * K,
+                           0,
+                           M * N,
+                           matmul_planner);
+    }
+  } else if (!is_broadcast_dims) {
+    VLOG(3) << "MatMul with blaslt 13";
+    blaslt::RunWithBatch(dev_ctx,
+                         x_data,
+                         y_data,
+                         dev_ctx.template Alloc<T>(Out),
+                         M,
+                         N,
+                         K,
+                         trans_x,
+                         trans_y,
+                         out_batch_size,
+                         M * K,
+                         K * N,
+                         M * N,
+                         matmul_planner);
+  } else {
+    // in the case, can't use stridedgemm
+    std::vector<const T*> x_ptr(out_batch_size);
+    std::vector<const T*> y_ptr(out_batch_size);
+    std::vector<T*> out_ptr(out_batch_size);
+    std::vector<std::int64_t> index(batch_dim, 0);
+    for (std::int64_t i = 0; i < out_batch_size; ++i) {
+      // using the index to get offset
+      const std::int64_t x_index =
+          GetIndexMessage(batch_dim, x_broadcast_dims.data(), index.data());
+      const std::int64_t y_index =
+          GetIndexMessage(batch_dim, y_broadcast_dims.data(), index.data());
+
+      x_ptr[i] = x_data + x_index * M * K;
+      y_ptr[i] = y_data + y_index * K * N;
+      out_ptr[i] = dev_ctx.template Alloc<T>(Out) + i * M * N;
+      IndexIncreaseFromDims(batch_dim, out_broadcast_dims.data(), index.data());
+    }
+    VLOG(3) << "MatMul with blaslt 14";
+    blaslt::RunWithBatch(dev_ctx,
+                         x_ptr.data(),
+                         y_ptr.data(),
+                         out_ptr.data(),
+                         M,
+                         N,
+                         K,
+                         trans_x,
+                         trans_y,
+                         out_batch_size,
+                         matmul_planner);
+  }
+}
+#endif
+
 template <typename Context, typename T>
 struct MatMulDispatcher {
   void operator()(const Context& ctx,
@@ -921,6 +1327,8 @@ struct MatMulDispatcher<phi::GPUContext, T> {
                   bool trans_y,
                   bool flag = false) {
 #if CUDA_VERSION >= 11060
+    // Instance TODO
+    // 这里 tune 了 MatmulFunctionImplWithBlas 和 MatmulFunctionImplWithCublasLt
     auto* tuner = phi::autotune::MakeMatmulTuner<T>(
         MatMulFunctionImplWithBlas<phi::GPUContext, T>);
     tuner->AddCallBack(MatMulFunctionImplWithCublasLt<phi::GPUContext, T>);
@@ -977,6 +1385,8 @@ void MatMulFunction(const Context& ctx,
       ctx, x, y, x_dims, y_dims, out, trans_x, trans_y, flag);
 }
 
+// TODO(yinshangfei) fix context?
+// TODO(yinshangfei) autotune
 template <typename Context>
 void MatMulInt8Function(const Context& ctx,
                         const DenseTensor& x,
@@ -1004,31 +1414,212 @@ void MatMulInt8Function(const Context& ctx,
           "type of data (%s) currently contained in the container.",
           phi::CppTypeToDataType<int8_t>::Type(),
           x.dtype()));
+  // todo CUDA VERSION
 #if defined(PADDLE_WITH_CUDA) && CUDA_VERSION >= 11020
   const int x_ndim = x_dims.size();
   const int y_ndim = y_dims.size();
-  PADDLE_ENFORCE_EQ(
-      x_ndim,
-      2,
-      phi::errors::InvalidArgument("[INT8 GEMM] The number of dims of input(x) "
-                                   "must be equal to 2 but received %d",
-                                   x_ndim));
-  PADDLE_ENFORCE_EQ(
-      y_ndim,
-      2,
-      phi::errors::InvalidArgument("[INT8 GEMM] The number of dims of input(x) "
-                                   "must be equal to 2 but received %d",
-                                   y_ndim));
-  PADDLE_ENFORCE_EQ(
-      trans_x,
-      false,
-      phi::errors::InvalidArgument("[INT8 GEMM] Input(x) must be not "
-                                   "transposed to acheive better performance"));
-  PADDLE_ENFORCE_EQ(
-      trans_y,
-      true,
-      phi::errors::InvalidArgument("[INT8 GEMM] Input(y) must be transposed to "
-                                   "acheive better performance"));
+  const int8_t* x_data = X.data<int8_t>();
+  const int8_t* y_data = Y.data<int8_t>();
+  using blaslt = phi::funcs::MatmulWithCublasLt<int8_t, int32_t>;
+
+  // TODO(yinshangfei) ensure the matmulWithCublasLt support int8_t
+  
+  if (x_ndim == 1 && y_ndim == 1) {
+    const int M = X.numel();
+    const int N = Y.numel();
+    PADDLE_ENFORCE_EQ(
+        M,
+        N,
+        phi::errors::InvalidArgument(
+            "X's numbers must be equal to Y's numbers,"
+            "when X/Y's dims =1. But received X has [%d] elements,"
+            "received Y has [%d] elements",
+            M,
+            N));
+
+    // MatMul's case 0  =>  vector * vector
+    Out->Resize(phi::make_ddim({}));
+    dev_ctx.template Alloc<int32_t>(Out);
+    VLOG(3) << "MatMul with blaslt case 1";
+    blaslt::Run(ctx,
+                y_data,
+                x_data,
+                ctx.template Alloc<int32_t>(Out),
+                1,
+                1,
+                M,
+                false,
+                true,
+                nullptr);
+    return;
+  }
+
+  if (x_ndim == 1) {
+    const int N = X.numel();
+    if (trans_y) {
+      PADDLE_ENFORCE_EQ(
+          y_dims[y_ndim - 1],
+          N,
+          phi::errors::InvalidArgument("Input(Y) has error dim."
+                                       "Y'dims[%d] must be equal to %d"
+                                       "But received Y'dims[%d] is %d",
+                                       y_ndim - 1,
+                                       N,
+                                       y_ndim - 1,
+                                       y_dims[y_ndim - 1]));
+    } else {
+      PADDLE_ENFORCE_EQ(
+          y_dims[y_ndim - 2],
+          N,
+          phi::errors::InvalidArgument("Input(Y) has error dim."
+                                       "Y'dims[%d] must be equal to %d"
+                                       "But received Y'dims[%d] is %d",
+                                       y_ndim - 2,
+                                       N,
+                                       y_ndim - 2,
+                                       y_dims[y_ndim - 2]));
+    }
+    std::vector<std::int64_t> out_dims(y_ndim - 1);
+    if (trans_y) {
+      std::copy_n(y_dims.cbegin(), y_ndim - 1, out_dims.begin());
+    } else {
+      std::copy_n(y_dims.cbegin(), y_ndim - 2, out_dims.begin());
+      out_dims.back() = y_dims.back();
+    }
+    Out->ResizeAndAllocate(phi::make_ddim(out_dims));
+    dev_ctx.template Alloc<int32_t>(Out);
+    if (trans_y) {
+      const int M = Y.numel() / N;
+      VLOG(3) << "MatMul with blaslt 2";
+      blaslt::Run(ctx,
+                  y_data,
+                  x_data,
+                  ctx.template Alloc<int32_t>(Out),
+                  M,
+                  1,
+                  N,
+                  false,
+                  false,
+                  nullptr);
+    } else {
+      const int M = y_dims[y_ndim - 1];
+      const int batch_size = Y.numel() / (M * N);
+      if (batch_size == 1) {
+        VLOG(3) << "MatMul with blaslt 3";
+        blaslt::Run(ctx,
+                    y_data,
+                    x_data,
+                    ctx.template Alloc<int32_t>(Out),
+                    M,
+                    1,
+                    N,
+                    true,
+                    false,
+                    nullptr);
+      } else {
+        VLOG(3) << "MatMul with blaslt 4";
+        blaslt::RunWithBatch(ctx,
+                             y_data,
+                             x_data,
+                             ctx.template Alloc<int32_t>(Out),
+                             M,
+                             1,
+                             N,
+                             true,
+                             false,
+                             batch_size,
+                             M * N,
+                             0,
+                             M,
+                             nullptr);
+      }
+    }
+    return;
+  }
+
+  if (y_ndim == 1) {
+    const int N = Y.numel();
+    if (trans_x) {
+      PADDLE_ENFORCE_EQ(
+          x_dims[x_ndim - 2],
+          N,
+          phi::errors::InvalidArgument("Input(X) has error dim."
+                                       "X'dims[%d] must be equal to %d"
+                                       "But received X'dims[%d] is %d",
+                                       x_ndim - 2,
+                                       N,
+                                       x_ndim - 2,
+                                       x_dims[x_ndim - 2]));
+    } else {
+      PADDLE_ENFORCE_EQ(
+          x_dims[x_ndim - 1],
+          N,
+          phi::errors::InvalidArgument("Input(X) has error dim."
+                                       "X'dims[%d] must be equal to %d"
+                                       "But received X'dims[%d] is %d",
+                                       x_ndim - 1,
+                                       N,
+                                       x_ndim - 1,
+                                       x_dims[x_ndim - 1]));
+    }
+    std::vector<std::int64_t> out_dims(x_ndim - 1);
+    if (trans_x) {
+      std::copy_n(x_dims.cbegin(), x_ndim - 2, out_dims.begin());
+      out_dims.back() = x_dims.back();
+    } else {
+      std::copy_n(x_dims.cbegin(), x_ndim - 1, out_dims.begin());
+    }
+    Out->ResizeAndAllocate(phi::make_ddim(out_dims));
+    dev_ctx.template Alloc<int32_t>(Out);
+
+    if (trans_x) {
+      const int M = x_dims[x_ndim - 1];
+      const int batch_size = X.numel() / (M * N);
+      if (batch_size == 1) {
+        VLOG(3) << "MatMul with blaslt 5";
+        blaslt::Run(ctx,
+                    x_data,
+                    y_data,
+                    ctx.template Alloc<int32_t>(Out),
+                    M,
+                    1,
+                    N,
+                    true,
+                    false,
+                    nullptr);
+      } else {
+        VLOG(3) << "MatMul with blaslt 6";
+        blaslt::RunWithBatch(ctx,
+                             x_data,
+                             y_data,
+                             ctx.template Alloc<int32_t>(Out),
+                             M,
+                             1,
+                             N,
+                             true,
+                             false,
+                             batch_size,
+                             M * N,
+                             0,
+                             M,
+                             nullptr);
+      }
+    } else {
+      const int M = X.numel() / N;
+      VLOG(3) << "MatMul with blaslt 7";
+      blaslt::Run(ctx,
+                  x_data,
+                  y_data,
+                  ctx.template Alloc<int32_t>(Out),
+                  M,
+                  1,
+                  N,
+                  false,
+                  false,
+                  nullptr);
+    }
+    return;
+  }
 
   const int M = trans_x ? x_dims[x_ndim - 1] : x_dims[x_ndim - 2];
   const int K = trans_x ? x_dims[x_ndim - 2] : x_dims[x_ndim - 1];
@@ -1056,21 +1647,176 @@ void MatMulInt8Function(const Context& ctx,
                                      y_dims[y_ndim - 2]));
   }
   const int N = trans_y ? y_dims[y_ndim - 2] : y_dims[y_ndim - 1];
+  const int ndim = (std::max)(x_ndim, y_ndim);
+  std::vector<std::int64_t> x_broadcast_dims(ndim);
+  std::vector<std::int64_t> y_broadcast_dims(ndim);
+  std::vector<std::int64_t> out_broadcast_dims(ndim);
+  GetBroadcastFromDims(x_ndim - 2,
+                       x_dims.data(),
+                       y_ndim - 2,
+                       y_dims.data(),
+                       x_broadcast_dims.data(),
+                       y_broadcast_dims.data(),
+                       out_broadcast_dims.data());
+  out_broadcast_dims[ndim - 2] = M;
+  out_broadcast_dims[ndim - 1] = N;
 
-  size_t workspace_size = static_cast<size_t>(4) * 1024 * 1024;
-  phi::Allocator::AllocationPtr workspace = GetWorkspace(ctx, workspace_size);
+  onst int batch_dim = ndim - 2;
+  // broadcast message
+  const bool is_broadcast_dims =
+      !std::equal(x_broadcast_dims.cbegin(),
+                  x_broadcast_dims.cbegin() + batch_dim,
+                  y_broadcast_dims.cbegin());
+
+  const std::int64_t x_batch_size =
+      std::accumulate(x_broadcast_dims.cbegin(),
+                      x_broadcast_dims.cbegin() + batch_dim,
+                      1LL,
+                      std::multiplies<std::int64_t>());
+  const std::int64_t y_batch_size =
+      std::accumulate(y_broadcast_dims.cbegin(),
+                      y_broadcast_dims.cbegin() + batch_dim,
+                      1LL,
+                      std::multiplies<std::int64_t>());
+  const std::int64_t out_batch_size =
+      std::accumulate(out_broadcast_dims.cbegin(),
+                      out_broadcast_dims.cbegin() + batch_dim,
+                      1LL,
+                      std::multiplies<std::int64_t>());
+  if (out_batch_size == 0) return;
+  if (x_batch_size == 1 && y_batch_size == 1) {
+    VLOG(3) << "MatMul with blaslt 8";
+    blaslt::Run(ctx,
+                x_data,
+                y_data,
+                ctx.template Alloc<int32_t>(Out),
+                M,
+                N,
+                K,
+                trans_x,
+                trans_y,
+                nullptr);
+  } else if (x_batch_size == 1) {
+    if (M == 1 && trans_y) {
+      VLOG(3) << "MatMul with blaslt 9";
+      blaslt::Run(ctx,
+                  y_data,
+                  x_data,
+                  ctx.template Alloc<int32_t>(Out),
+                  y_batch_size * N,
+                  1,
+                  K,
+                  false,
+                  false,
+                  nullptr);
+    } else {
+      VLOG(3) << "MatMul with blaslt 10";
+      blaslt::RunWithBatch(ctx,
+                           x_data,
+                           y_data,
+                           ctx.template Alloc<int32_t>(Out),
+                           M,
+                           N,
+                           K,
+                           trans_x,
+                           trans_y,
+                           out_batch_size,
+                           0,
+                           K * N,
+                           M * N,
+                           nullptr);
+    }
+  } else if (y_batch_size == 1) {
+    if (!trans_x) {
+      VLOG(3) << "MatMul with blaslt 11";
+      blaslt::Run(ctx,
+                  x_data,
+                  y_data,
+                  ctx.template Alloc<int32_t>(Out),
+                  x_batch_size * M,
+                  N,
+                  K,
+                  false,
+                  trans_y,
+                  nullptr);
+    } else {
+      VLOG(3) << "MatMul with blaslt 12";
+      blaslt::RunWithBatch(ctx,
+                           x_data,
+                           y_data,
+                           ctx.template Alloc<int32_t>(Out),
+                           M,
+                           N,
+                           K,
+                           true,
+                           trans_y,
+                           out_batch_size,
+                           M * K,
+                           0,
+                           M * N,
+                           nullptr);
+    }
+  } else if (!is_broadcast_dims) {
+    VLOG(3) << "MatMul with blaslt 13";
+    blaslt::RunWithBatch(ctx,
+                         x_data,
+                         y_data,
+                         ctx.template Alloc<int32_t>(Out),
+                         M,
+                         N,
+                         K,
+                         trans_x,
+                         trans_y,
+                         out_batch_size,
+                         M * K,
+                         K * N,
+                         M * N,
+                         nullptr);
+  } else {
+    // in the case, can't use stridedgemm
+    std::vector<const int8_t*> x_ptr(out_batch_size);
+    std::vector<const int8_t*> y_ptr(out_batch_size);
+    std::vector<int32_t*> out_ptr(out_batch_size);
+    std::vector<std::int64_t> index(batch_dim, 0);
+    for (std::int64_t i = 0; i < out_batch_size; ++i) {
+      // using the index to get offset
+      const std::int64_t x_index =
+          GetIndexMessage(batch_dim, x_broadcast_dims.data(), index.data());
+      const std::int64_t y_index =
+          GetIndexMessage(batch_dim, y_broadcast_dims.data(), index.data());
+
+      x_ptr[i] = x_data + x_index * M * K;
+      y_ptr[i] = y_data + y_index * K * N;
+      out_ptr[i] = dev_ctx.template Alloc<int32_t>(Out) + i * M * N;
+      IndexIncreaseFromDims(batch_dim, out_broadcast_dims.data(), index.data());
+    }
+    VLOG(3) << "MatMul with blaslt 14";
+    blaslt::RunWithBatch(ctx,
+                         x_ptr.data(),
+                         y_ptr.data(),
+                         out_ptr.data(),
+                         M,
+                         N,
+                         K,
+                         trans_x,
+                         trans_y,
+                         out_batch_size,
+                         nullptr);
+  }
+  // size_t workspace_size = static_cast<size_t>(4) * 1024 * 1024;
+  // phi::Allocator::AllocationPtr workspace = GetWorkspace(ctx, workspace_size);
 
   // TODO(wufeisheng): cublaslt_helper is a temp scheme for Int8 GEMM,
   // and releted functions need to be integrated into
   // phi::funcs::MatmulWithCublasLt
-  auto cublaslt_helper = CublasLtHelper(M, K, N, ctx.cublaslt_handle());
+  // auto cublaslt_helper = CublasLtHelper(M, K, N, ctx.cublaslt_handle());
 
-  ctx.template Alloc<int32_t>(out);
-  cublaslt_helper.GEMM(x.data<int8_t>(),
-                       y.data<int8_t>(),
-                       out->data<int32_t>(),
-                       ctx.stream(),
-                       workspace->ptr());
+  // ctx.template Alloc<int32_t>(out);
+  // cublaslt_helper.GEMM(x.data<int8_t>(),
+  //                      y.data<int8_t>(),
+  //                      out->data<int32_t>(),
+  //                      ctx.stream(),
+  //                      workspace->ptr());
 
 #else
   PADDLE_THROW(phi::errors::Unimplemented(

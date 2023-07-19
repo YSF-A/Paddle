@@ -54,6 +54,7 @@ class AutoTuneBase {
     kernels_.push_back(default_kernel);
   }
 
+  // 
   template <typename ReturnType, typename... Args>
   void AddCallBack(ReturnType (*func)(Args...)) {
     if (!is_init_) {
