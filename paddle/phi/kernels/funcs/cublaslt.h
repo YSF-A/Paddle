@@ -24,6 +24,7 @@ namespace dyl = phi::dynload;
 
 namespace phi {
 
+// MNK 到 AlgoParam 的映射
 struct CublasLtAlgoParam {
   int algoId;
   int swizzle;
@@ -36,6 +37,7 @@ struct CublasLtAlgoParam {
 };
 
 const std::map<std::tuple<int, int, int>, CublasLtAlgoParam> AlgoParamCache{};
+
 
 class CublasLtHelper {
  public:
