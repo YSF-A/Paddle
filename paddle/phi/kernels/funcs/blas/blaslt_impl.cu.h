@@ -32,6 +32,8 @@ limitations under the License. */
 PHI_DECLARE_int64(cublaslt_exhaustive_search_times);
 #endif
 
+// TODO(yinshangfei) there is no initial value for algo
+
 namespace phi {
 namespace funcs {
 
@@ -178,6 +180,7 @@ struct MatmulPlanner {
   size_t key_;
 };
 
+// TODO(yinshangfei): 如果扩展版本要求，这里需要修改
 template <typename T>
 cublasComputeType_t GetCudaComputeType() {
   if (std::is_same<T, double>::value) {
@@ -189,6 +192,7 @@ cublasComputeType_t GetCudaComputeType() {
   }
 }
 
+// TODO(yinshangfei): cublaslt.h中设置了初始的algo
 struct MatmulDescriptor {
  public:
   cublasLtMatmulDesc_t op_desc{nullptr};
@@ -242,18 +246,24 @@ struct MatmulDescriptor {
     cudaDataType_t scale_type = phi::backends::gpu::ToCudaDataType<MT>();
     cublasComputeType_t compute_type = GetCudaComputeType<T>();
 
+  
+    // note 对应 Helper 中构造器的 cublasLtMatmulDescCreate
+    // note 调整版本号需要修改
     // Create operation descriptor; see cublasLtMatmulDescAttributes_t for
     // details about defaults; just need to set the transforms for A and B
     PADDLE_ENFORCE_GPU_SUCCESS(
         dynload::cublasLtMatmulDescCreate(&op_desc, compute_type, scale_type));
+    // note 对应 Helper 中构造器的 cublasLtMatmulDescSetAttribute
     SetFusedEpilogueOpDescriptor(planner, trans_x, trans_y, N);
 
     // Create matrix descriptors
+    // note 对应 Helper 中cublasLtMatrixLayoutCreate
     CreateMatrixLayout(&x_desc, mat_type, M, K, trans_x);
     CreateMatrixLayout(&y_desc, mat_type, K, N, trans_y);
     CreateMatrixLayout(&out_desc, mat_type, M, N, false);
 
     // Config batch size and stride.
+    // note Helper 中没有的
     if (batch_size > 1) {
       SetBatchAndStride(x_desc, batch_size, stride_x);
       SetBatchAndStride(y_desc, batch_size, stride_y);
@@ -462,9 +472,12 @@ struct CublasLtBase {
     size_t workspace_size = static_cast<size_t>(4) * 1024 * 1024;
     phi::Allocator::AllocationPtr workspace = GetWorkspace(ctx, workspace_size);
 
+    // note: 对应 Helper中设定算法参数
+    // TODO(yinshangfei) conflict with  MT beta = planner->UseAddTo() ? static_cast<MT>(1) : static_cast<MT>(0);
     if (planner != nullptr) {
       if (phi::autotune::AutoTuneStatus::Instance().UseAutoTune() &&
           (!desc->is_cached)) {
+        // note 算法参数
         SearchBestAlgo(ctx,
                        cublaslt_handle,
                        desc,
@@ -627,6 +640,7 @@ struct CublasLtBase {
   }
 };
 
+// TODO(yinshangfei): should adjust for null planner or not?
 // To judge if desc is cached or not.
 template <class DescT,
           typename T,
@@ -682,13 +696,13 @@ struct DescriptorSetter {
 };
 
 // For matmul with kernels autotune
-template <typename T>
-struct MatmulWithCublasLt : public CublasLtBase<T> {
+template <typename T, typename OutT = T>
+struct MatmulWithCublasLt : public CublasLtBase<T, OutT> {
  public:
   static void Run(const phi::GPUContext& ctx,
                   const T* x_data,
                   const T* y_data,
-                  T* out_data,
+                  OutT* out_data,
                   const int64_t M,
                   const int64_t N,
                   const int64_t K,
@@ -697,7 +711,7 @@ struct MatmulWithCublasLt : public CublasLtBase<T> {
                   phi::funcs::MatmulPlanner* planner = nullptr) {
     auto setter = DescriptorSetter<MatmulDescriptor, T>(
         planner, M, N, K, trans_x, trans_y);
-    CublasLtBase<T>::RunImpl(
+    CublasLtBase<T, OutT>::RunImpl(
         ctx, &setter.desc, setter.sub_key, x_data, y_data, out_data, planner);
   }
 
