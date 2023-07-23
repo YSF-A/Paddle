@@ -1,0 +1,144 @@
+
+class TestMatmulInt8_1(TestMatmulInt8):
+
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (1, 32)
+        self.y_shape = (16, 1)
+        self.trans_x = True
+        self.trans_y = True
+
+class TestMatmulInt8_2(TestMatmulInt8):
+
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (2, 32)
+        self.y_shape = (16, 2)
+        self.trans_x = True
+        self.trans_y = True
+
+class TestMatmulInt8_3(TestMatmulInt8):
+
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (3, 32)
+        self.y_shape = (16, 3)
+        self.trans_x = True
+        self.trans_y = True
+
+class TestMatmulInt8_4(TestMatmulInt8):
+
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (4, 32)
+        self.y_shape = (16, 4)
+        self.trans_x = True
+        self.trans_y = True
+
+class TestMatmulInt8_5(TestMatmulInt8):
+
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (5, 32)
+        self.y_shape = (16, 5)
+        self.trans_x = True
+        self.trans_y = True
+
+class TestMatmulInt8_6(TestMatmulInt8):
+
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (6, 32)
+        self.y_shape = (16, 6)
+        self.trans_x = True
+        self.trans_y = True
+
+class TestMatmulInt8_7(TestMatmulInt8):
+
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (8, 32)
+        self.y_shape = (16, 8)
+        self.trans_x = True
+        self.trans_y = True
+
+class TestMatmulInt8_8(TestMatmulInt8):
+
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (9, 32)
+        self.y_shape = (16, 9)
+        self.trans_x = True
+        self.trans_y = True
+
+class TestMatmulInt8_9(TestMatmulInt8):
+
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (10, 32)
+        self.y_shape = (16, 10)
+        self.trans_x = True
+        self.trans_y = True
+
+class TestMatmulInt8_10(TestMatmulInt8):
+
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (12, 32)
+        self.y_shape = (16, 12)
+        self.trans_x = True
+        self.trans_y = True
+
+class TestMatmulInt8_11(TestMatmulInt8):
+
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (16, 32)
+        self.y_shape = (16, 16)
+        self.trans_x = True
+        self.trans_y = True
+
+class TestMatmulInt8_12(TestMatmulInt8):
+
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (17, 32)
+        self.y_shape = (16, 17)
+        self.trans_x = True
+        self.trans_y = True
