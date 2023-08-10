@@ -14,6 +14,7 @@ limitations under the License. */
 
 #pragma once
 
+#include <stdio.h>
 #include "glog/logging.h"
 
 #include "paddle/phi/common/memory_utils.h"
@@ -1009,8 +1010,8 @@ void MatMulInt8Function(const Context& ctx,
 #if defined(PADDLE_WITH_CUDA) && CUDA_VERSION >= 11020
   const int x_ndim = x_dims.size();
   const int y_ndim = y_dims.size();
-  const int8_t* x_data = X.data<int8_t>();
-  const int8_t* y_data = Y.data<int8_t>();
+  const int8_t* x_data = x.data<int8_t>();
+  const int8_t* y_data = y.data<int8_t>();
   using blaslt = phi::funcs::MatmulWithCublasLt<int8_t, int32_t>;
 
   // TODO(yinshangfei) ensure mamtul_planner
@@ -1018,7 +1019,7 @@ void MatMulInt8Function(const Context& ctx,
                                            y_dims,
                                            trans_x,
                                            trans_y,
-                                           phi::CppTypeToDataType<T>::Type(),
+                                           phi::CppTypeToDataType<int8_t>::Type(),
                                            funcs::MatmulFusedType::kMatmul,
                                            /* bias_data */ nullptr,
                                            /* reserve_data */ nullptr,
@@ -1026,8 +1027,8 @@ void MatMulInt8Function(const Context& ctx,
                                            /* no_exchange */ true);
   
   if (x_ndim == 1 && y_ndim == 1) {
-    const int M = X.numel();
-    const int N = Y.numel();
+    const int M = x.numel();
+    const int N = y.numel();
     PADDLE_ENFORCE_EQ(
         M,
         N,
@@ -1038,23 +1039,23 @@ void MatMulInt8Function(const Context& ctx,
             M,
             N));
 
-    Out->Resize(phi::make_ddim({}));
-    dev_ctx.template Alloc<int32_t>(Out);
+    out->Resize(phi::make_ddim({}));
+    ctx.template Alloc<int32_t>(out);
     blaslt::Run(ctx,
                 y_data,
                 x_data,
-                ctx.template Alloc<int32_t>(Out),
+                ctx.template Alloc<int32_t>(out),
                 1,
                 1,
                 M,
                 false,
                 true,
-                matmul_planner);
+                &matmul_planner);
     return;
   }
 
   if (x_ndim == 1) {
-    const int N = X.numel();
+    const int N = x.numel();
     if (trans_y) {
       PADDLE_ENFORCE_EQ(
           y_dims[y_ndim - 1],
@@ -1085,39 +1086,39 @@ void MatMulInt8Function(const Context& ctx,
       std::copy_n(y_dims.cbegin(), y_ndim - 2, out_dims.begin());
       out_dims.back() = y_dims.back();
     }
-    Out->ResizeAndAllocate(phi::make_ddim(out_dims));
-    dev_ctx.template Alloc<int32_t>(Out);
+    out->ResizeAndAllocate(phi::make_ddim(out_dims));
+    ctx.template Alloc<int32_t>(out);
     if (trans_y) {
-      const int M = Y.numel() / N;
+      const int M = y.numel() / N;
       blaslt::Run(ctx,
                   y_data,
                   x_data,
-                  ctx.template Alloc<int32_t>(Out),
+                  ctx.template Alloc<int32_t>(out),
                   M,
                   1,
                   N,
                   false,
                   false,
-                  matmul_planner);
+                  &matmul_planner);
     } else {
       const int M = y_dims[y_ndim - 1];
-      const int batch_size = Y.numel() / (M * N);
+      const int batch_size = y.numel() / (M * N);
       if (batch_size == 1) {
         blaslt::Run(ctx,
                     y_data,
                     x_data,
-                    ctx.template Alloc<int32_t>(Out),
+                    ctx.template Alloc<int32_t>(out),
                     M,
                     1,
                     N,
                     true,
                     false,
-                    matmul_planner);
+                    &matmul_planner);
       } else {
         blaslt::RunWithBatch(ctx,
                              y_data,
                              x_data,
-                             ctx.template Alloc<int32_t>(Out),
+                             ctx.template Alloc<int32_t>(out),
                              M,
                              1,
                              N,
@@ -1127,14 +1128,14 @@ void MatMulInt8Function(const Context& ctx,
                              M * N,
                              0,
                              M,
-                             matmul_planner);
+                             &matmul_planner);
       }
     }
     return;
   }
 
   if (y_ndim == 1) {
-    const int N = Y.numel();
+    const int N = y.numel();
     if (trans_x) {
       PADDLE_ENFORCE_EQ(
           x_dims[x_ndim - 2],
@@ -1165,28 +1166,28 @@ void MatMulInt8Function(const Context& ctx,
     } else {
       std::copy_n(x_dims.cbegin(), x_ndim - 1, out_dims.begin());
     }
-    Out->ResizeAndAllocate(phi::make_ddim(out_dims));
-    dev_ctx.template Alloc<int32_t>(Out);
+    out->ResizeAndAllocate(phi::make_ddim(out_dims));
+    ctx.template Alloc<int32_t>(out);
 
     if (trans_x) {
       const int M = x_dims[x_ndim - 1];
-      const int batch_size = X.numel() / (M * N);
+      const int batch_size = x.numel() / (M * N);
       if (batch_size == 1) {
         blaslt::Run(ctx,
                     x_data,
                     y_data,
-                    ctx.template Alloc<int32_t>(Out),
+                    ctx.template Alloc<int32_t>(out),
                     M,
                     1,
                     N,
                     true,
                     false,
-                    matmul_planner);
+                    &matmul_planner);
       } else {
         blaslt::RunWithBatch(ctx,
                              x_data,
                              y_data,
-                             ctx.template Alloc<int32_t>(Out),
+                             ctx.template Alloc<int32_t>(out),
                              M,
                              1,
                              N,
@@ -1196,20 +1197,20 @@ void MatMulInt8Function(const Context& ctx,
                              M * N,
                              0,
                              M,
-                             matmul_planner);
+                             &matmul_planner);
       }
     } else {
-      const int M = X.numel() / N;
+      const int M = x.numel() / N;
       blaslt::Run(ctx,
                   x_data,
                   y_data,
-                  ctx.template Alloc<int32_t>(Out),
+                  ctx.template Alloc<int32_t>(out),
                   M,
                   1,
                   N,
                   false,
                   false,
-                  matmul_planner);
+                  &matmul_planner);
     }
     return;
   }
@@ -1254,7 +1255,7 @@ void MatMulInt8Function(const Context& ctx,
   out_broadcast_dims[ndim - 2] = M;
   out_broadcast_dims[ndim - 1] = N;
 
-  onst int batch_dim = ndim - 2;
+  const int batch_dim = ndim - 2;
   // broadcast message
   const bool is_broadcast_dims =
       !std::equal(x_broadcast_dims.cbegin(),
@@ -1281,30 +1282,30 @@ void MatMulInt8Function(const Context& ctx,
     blaslt::Run(ctx,
                 x_data,
                 y_data,
-                ctx.template Alloc<int32_t>(Out),
+                ctx.template Alloc<int32_t>(out),
                 M,
                 N,
                 K,
                 trans_x,
                 trans_y,
-                matmul_planner);
+                &matmul_planner);
   } else if (x_batch_size == 1) {
     if (M == 1 && trans_y) {
       blaslt::Run(ctx,
                   y_data,
                   x_data,
-                  ctx.template Alloc<int32_t>(Out),
+                  ctx.template Alloc<int32_t>(out),
                   y_batch_size * N,
                   1,
                   K,
                   false,
                   false,
-                  matmul_planner);
+                  &matmul_planner);
     } else {
       blaslt::RunWithBatch(ctx,
                            x_data,
                            y_data,
-                           ctx.template Alloc<int32_t>(Out),
+                           ctx.template Alloc<int32_t>(out),
                            M,
                            N,
                            K,
@@ -1314,25 +1315,25 @@ void MatMulInt8Function(const Context& ctx,
                            0,
                            K * N,
                            M * N,
-                           matmul_planner);
+                           &matmul_planner);
     }
   } else if (y_batch_size == 1) {
     if (!trans_x) {
       blaslt::Run(ctx,
                   x_data,
                   y_data,
-                  ctx.template Alloc<int32_t>(Out),
+                  ctx.template Alloc<int32_t>(out),
                   x_batch_size * M,
                   N,
                   K,
                   false,
                   trans_y,
-                  matmul_planner);
+                  &matmul_planner);
     } else {
       blaslt::RunWithBatch(ctx,
                            x_data,
                            y_data,
-                           ctx.template Alloc<int32_t>(Out),
+                           ctx.template Alloc<int32_t>(out),
                            M,
                            N,
                            K,
@@ -1342,13 +1343,13 @@ void MatMulInt8Function(const Context& ctx,
                            M * K,
                            0,
                            M * N,
-                           matmul_planner);
+                           &matmul_planner);
     }
   } else if (!is_broadcast_dims) {
     blaslt::RunWithBatch(ctx,
                          x_data,
                          y_data,
-                         ctx.template Alloc<int32_t>(Out),
+                         ctx.template Alloc<int32_t>(out),
                          M,
                          N,
                          K,
@@ -1358,7 +1359,7 @@ void MatMulInt8Function(const Context& ctx,
                          M * K,
                          K * N,
                          M * N,
-                         matmul_planner);
+                         &matmul_planner);
   } else {
     // in the case, can't use stridedgemm
     std::vector<const int8_t*> x_ptr(out_batch_size);
@@ -1374,7 +1375,7 @@ void MatMulInt8Function(const Context& ctx,
 
       x_ptr[i] = x_data + x_index * M * K;
       y_ptr[i] = y_data + y_index * K * N;
-      out_ptr[i] = dev_ctx.template Alloc<int32_t>(Out) + i * M * N;
+      out_ptr[i] = ctx.template Alloc<int32_t>(out) + i * M * N;
       IndexIncreaseFromDims(batch_dim, out_broadcast_dims.data(), index.data());
     }
     blaslt::RunWithBatch(ctx,
@@ -1387,7 +1388,7 @@ void MatMulInt8Function(const Context& ctx,
                          trans_x,
                          trans_y,
                          out_batch_size,
-                         matmul_planner);
+                         &matmul_planner);
   }
 
 #else
@@ -1426,6 +1427,7 @@ void MatmulInt8Kernel(const Context& ctx,
                       bool transpose_x,
                       bool transpose_y,
                       DenseTensor* out) {
+  printf("MatmulInt8Kernel %d %d\n", transpose_x, transpose_y);
   PADDLE_ENFORCE_NE(
       phi::product(x.dims()),
       0,

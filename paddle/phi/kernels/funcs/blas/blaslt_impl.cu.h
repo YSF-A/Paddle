@@ -641,6 +641,7 @@ struct CublasLtBase {
 };
 
 // TODO(yinshangfei): should adjust for null planner or not?
+// TODO(yinshangfei): whether add Out type
 // To judge if desc is cached or not.
 template <class DescT,
           typename T,
@@ -718,7 +719,7 @@ struct MatmulWithCublasLt : public CublasLtBase<T, OutT> {
   static void RunWithBatch(const phi::GPUContext& ctx,
                            const T* x_data,
                            const T* y_data,
-                           T* out_data,
+                           OutT* out_data,
                            const int64_t M,
                            const int64_t N,
                            const int64_t K,
@@ -739,14 +740,14 @@ struct MatmulWithCublasLt : public CublasLtBase<T, OutT> {
                                                         stride_x,
                                                         stride_y,
                                                         stride_out);
-    CublasLtBase<T>::RunImpl(
+    CublasLtBase<T, OutT>::RunImpl(
         ctx, &setter.desc, setter.sub_key, x_data, y_data, out_data, planner);
   }
 
   static void RunWithBatch(const phi::GPUContext& ctx,
                            const T** x_data,
                            const T** y_data,
-                           T** out_data,
+                           OutT** out_data,
                            const int64_t M,
                            const int64_t N,
                            const int64_t K,
