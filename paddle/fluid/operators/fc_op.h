@@ -84,6 +84,32 @@ class FCOpKernel : public framework::OpKernel<T> {
     auto* output_data =
         dev_ctx.template Alloc<T>(output, output->numel() * sizeof(T));
 
+    auto use_quantizer = ctx.Attr<bool>("use_quantizer");
+    if (use_quantizer) {
+      auto scale_in = ctx.Attr<float>("Scale_in");
+      auto scale_weights = ctx.Attr<std::vector<float>>("Scale_weights");
+      auto quant_round_type = ctx.Attr<int>("quant_round_type");
+      auto quant_max_bound = ctx.Attr<float>("quant_max_bound");
+      auto quant_min_bound = ctx.Attr<float>("quant_min_bound");
+      phi::funcs::FCInt8Functor<DeviceContext, T> fc;
+      fc(dev_ctx,
+         M,
+         w_dims1,
+         w_dims0,
+         input_data,
+         w_data,
+         output_data,
+         scale_in,
+         scale_weights,
+         quant_round_type,
+         quant_max_bound,
+         quant_min_bound,
+         bias ? bias->data<T>() : NULL,
+         with_relu,
+         padding_weights);
+      return;
+    }
+
     phi::funcs::FCFunctor<DeviceContext, T> fc;
     fc(dev_ctx,
        M,

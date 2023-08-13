@@ -14,6 +14,7 @@ limitations under the License. */
 
 #include <algorithm>
 
+#include "paddle/fluid/operators/fused/quant_dequant_kernel.h"
 #include "paddle/phi/backends/all_context.h"
 #include "paddle/phi/kernels/funcs/aligned_vector.h"
 #include "paddle/phi/kernels/funcs/blas/blas.h"
@@ -366,6 +367,73 @@ void FCFunctor<DeviceContext, T>::operator()(const DeviceContext& context,
 template class FCFunctor<GPUContext, float16>;
 template class FCFunctor<GPUContext, float>;
 template class FCFunctor<GPUContext, double>;
+
+// TODO(yinshangfei): ensure the DeviceContext
+template <typename DeviceContext, typename T>
+void FCInt8Functor<DeviceContext, T>::operator()(
+    const DeviceContext& context,
+    const int M,
+    const int N,
+    const int K,
+    const T* X,
+    const int8_t* W,
+    T* Y,
+    float scale_in,
+    std::vector<float> scale_weights,
+    int quant_round_type,
+    float quant_max_bound,
+    float quant_min_bound,
+    const T* B = nullptr,
+    bool relu = false,
+    bool padding_weights = false) {
+  PADDLE_ENFORCE_EQ(padding_weights,
+                    false,
+                    errors::PermissionDenied(
+                        "Weight padding in fc can not be used in GPU scope."));
+
+  // quant X
+  int8_t* quant_x;
+  cudaMalloc(&quant_X, sizeof(int8_t) * M * K);
+  LaunchQuantKernel(X,
+                    quant_x,
+                    scale_in,
+                    M,
+                    K,
+                    quant_round_type,
+                    quant_max_bound,
+                    quant_min_bound,
+                    dev_ctx_.stream());
+
+  int32_t* quant_y;
+  // TODO(yinshangfei): int8 gemm
+
+  // calculate quant out scale
+  // TODO(yinshangfei): quant_dequant_helper 感觉有问题
+  float* dequant_out_scale_data = (float*)malloc(sizeof(float) * N);
+  for (int i = 0; i < N; ++i) {
+    dequant_out_scale_data[i] = scale_in * scale_weights[i];
+  }
+
+  // dequant Y
+  // TODO(yinshangfei): ensure config
+  GpuLaunchConfig config =
+      phi::backends::gpu::GetGpuLaunchConfig1D(dev_ctx_, M * N, 4);
+  LaunchDequantKernel(quant_y,
+                      Y,
+                      M,
+                      N,
+                      dev_ctx_.stream(),
+                      &config,
+                      scale_in,
+                      dequant_out_scale_data);
+
+  if (B == NULL) {
+    return;
+  }
+
+  // M * N
+  AddReluKernel(context.stream(), M, N, Y, B, relu);
+}
 
 }  // namespace funcs
 }  // namespace phi
