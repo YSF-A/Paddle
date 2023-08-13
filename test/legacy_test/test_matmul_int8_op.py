@@ -13,8 +13,6 @@
 # limitations under the License.
 
 import unittest
-import logging
-import sys
 
 import numpy as np
 from test_sparse_attention_op import get_cuda_version
@@ -115,10 +113,7 @@ class TestMatmulInt8(unittest.TestCase):
         self.dtype = 'int8'
         self.rtol = 1e-5
         self.atol = 1e-2
-        self.bias = True
-        # self.m = 8
-        # self.k = 64
-        # self.n = 64
+        self.bias = False
         self.x_shape = (8, 64)
         self.y_shape = (64, 64)
         self.trans_x = False
@@ -133,34 +128,34 @@ class TestMatmulInt8(unittest.TestCase):
             'int32'
         )
         if self.trans_x:
-            if input_a_np.ndim == 1:
+            if self.input_a_np.ndim == 1:
                 self.input_a = paddle.to_tensor(
                     self.input_a_np.reshape((self.input_a_np.size, )), 
                     dtype=self.dtype)
-            elif input_a_np.ndim == 2:
+            elif self.input_a_np.ndim == 2:
                 self.input_a = paddle.to_tensor(
                     self.input_a_np.T, dtype=self.dtype)
             else:
                 dim = list(range(len(self.input_a_np.shape)))
                 dim[-1], dim[len(self.input_a_np.shape) - 2] = dim[len(self.input_a_np.shape) - 2], dim[-1]
                 self.input_a = paddle.to_tensor(
-                    self.input_a_np.transpose(input_a_np.size, tuple(dim)), 
+                    self.input_a_np.transpose(self.input_a_np.size, tuple(dim)), 
                     dtype=self.dtype)
         else:
             self.input_a = paddle.to_tensor(self.input_a_np, dtype=self.dtype)
         if self.trans_y:
-            if input_b_np.ndim == 1:
+            if self.input_b_np.ndim == 1:
                 self.input_b = paddle.to_tensor(
                     self.input_b_np.reshape((self.input_b_np.size, )), 
                     dtype=self.dtype)
-            elif input_b_np.ndim == 2:
+            elif self.input_b_np.ndim == 2:
                 self.input_b = paddle.to_tensor(
                     self.input_b_np.T, dtype=self.dtype)
             else:
                 dim = list(range(len(self.input_b_np.shape)))
                 dim[-1], dim[len(self.input_b_np.shape) - 2] = dim[len(self.input_b_np.shape) - 2], dim[-1]
                 self.input_b = paddle.to_tensor(
-                    self.input_b_np.transpose(input_b_np.size, tuple(dim)), 
+                    self.input_b_np.transpose(self.input_b_np.size, tuple(dim)), 
                     dtype=self.dtype)
         else:
             self.input_b = paddle.to_tensor(self.input_b_np, dtype=self.dtype)
@@ -171,13 +166,10 @@ class TestMatmulInt8(unittest.TestCase):
         return out
 
     def get_op_out(self):
-        out = paddle._C_ops.matmul_int8(self.input_a, self.input_b, slef.trans_x, self.trans_y)
+        out = paddle._C_ops.matmul_int8(self.input_a, self.input_b, self.trans_x, self.trans_y)
         return out.numpy()
 
     def test_matmul_int8(self):
-
-        self.assert_equal('0', '1')
-        
         out_real = self.get_op_out()
         out_expect = self.get_reference_out()
         np.testing.assert_allclose(
@@ -189,19 +181,198 @@ class TestMatmulInt8Op2(TestMatmulInt8):
         self.dtype = 'int8'
         self.rtol = 1e-5
         self.atol = 1e-2
-        self.bias = True
+        self.bias = False
         self.x_shape = (100,)
         self.y_shape = (1, 3, 2, 100)
         self.trans_x = False
         self.trans_y = True
 
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-        try:
-            print("AA2")
-            logging.getLogger().info("BB2")
-        finally:
-            logger.removeHandler(stream_handler)
+class TestMatmulInt8Op3(TestMatmulInt8):
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (100,)
+        self.y_shape = (1, 1, 100, 2)
+        self.trans_x = False
+        self.trans_y = False
+
+class TestMatmulInt8Op4(TestMatmulInt8):
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (100,)
+        self.y_shape = (1, 2, 100, 2)
+        self.trans_x = False
+        self.trans_y = False
+
+class TestMatmulInt8Op5(TestMatmulInt8):
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (1, 1, 100, 1)
+        self.y_shape = (100,)
+        self.trans_x = True
+        self.trans_y = False
+
+class TestMatmulInt8Op6(TestMatmulInt8):
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (1, 2, 102, 1)
+        self.y_shape = (102,)
+        self.trans_x = True
+        self.trans_y = False
+
+class TestMatmulInt8Op7(TestMatmulInt8):
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (1, 2, 1, 100)
+        self.y_shape = (100,)
+        self.trans_x = False
+        self.trans_y = False
+
+class TestMatmulInt8Op8(TestMatmulInt8):
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (1, 1, 2, 100)
+        self.y_shape = (1, 1, 100, 2)
+        self.trans_x = False
+        self.trans_y = False
+
+class TestMatmulInt8Op9(TestMatmulInt8):
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (1, 1, 1, 100)
+        self.y_shape = (2, 1, 2, 100)
+        self.trans_x = False
+        self.trans_y = True
+
+class TestMatmulInt8Op10(TestMatmulInt8):
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (1, 1, 25, 4)
+        self.y_shape = (1, 2, 4, 25)
+        self.trans_x = False
+        self.trans_y = False
+
+class TestMatmulInt8Op11(TestMatmulInt8):
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (2, 1, 2, 100)
+        self.y_shape = (1, 1, 100, 2)
+        self.trans_x = False
+        self.trans_y = False
+
+class TestMatmulInt8Op12(TestMatmulInt8):
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (2, 1, 4, 25)
+        self.y_shape = (1, 1, 4, 25)
+        self.trans_x = True
+        self.trans_y = False
+
+class TestMatmulInt8Op13(TestMatmulInt8):
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (2, 2, 10, 10)
+        self.y_shape = (2, 2, 10, 10)
+        self.trans_x = True
+        self.trans_y = False
+
+class TestMatmulInt8Op14(TestMatmulInt8):
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (3, 1, 6, 6)
+        self.y_shape = (1, 2, 6, 9)
+        self.trans_x = True
+        self.trans_y = False
+
+class TestMatmulInt8Op15(TestMatmulInt8):
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (3, 1, 6, 6)
+        self.y_shape = (1, 2, 6, 9)
+        self.trans_x = False
+        self.trans_y = False
+
+class TestMatmulInt8Op16(TestMatmulInt8):
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = 100
+        self.y_shape = (1, 2, 2, 100, 2)
+        self.trans_x = False
+        self.trans_y = False
+   
+class TestMatmulInt8Op17(TestMatmulInt8):
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (2, 1, 100)
+        self.y_shape = 100
+        self.trans_x = False
+        self.trans_y = False
+
+class TestMatmulInt8OpBroadcast1(TestMatmulInt8):
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (3, 1, 10, 10)
+        self.y_shape = (1, 2, 10, 10)
+        self.trans_x = True
+        self.trans_y = True
+
+class TestMatmulInt8OpBroadcast2(TestMatmulInt8):
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (3, 1, 10, 10)
+        self.y_shape = (1, 2, 10, 10)
+        self.trans_x = False
+        self.trans_y = True
 
 
 if __name__ == '__main__':
