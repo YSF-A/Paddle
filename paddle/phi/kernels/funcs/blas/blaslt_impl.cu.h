@@ -243,54 +243,14 @@ struct MatmulDescriptor {
               bool grad_for_dx = true) {
     using MT = typename phi::dtype::MPTypeTrait<T>::Type;
     cudaDataType_t mat_type = phi::backends::gpu::ToCudaDataType<T>();
+    cudaDataType_t out_mat_type = phi::backends::gpu::ToCudaDataType<T>();
     cudaDataType_t scale_type = phi::backends::gpu::ToCudaDataType<MT>();
     cublasComputeType_t compute_type = GetCudaComputeType<T>();
 
-    // note 对应 Helper 中构造器的 cublasLtMatmulDescCreate
-    // note 调整版本号需要修改
-    // Create operation descriptor; see cublasLtMatmulDescAttributes_t for
-    // details about defaults; just need to set the transforms for A and B
-    PADDLE_ENFORCE_GPU_SUCCESS(
-        dynload::cublasLtMatmulDescCreate(&op_desc, compute_type, scale_type));
-    // note 对应 Helper 中构造器的 cublasLtMatmulDescSetAttribute
-    SetFusedEpilogueOpDescriptor(planner, trans_x, trans_y, N);
-
-    // Create matrix descriptors
-    // note 对应 Helper 中cublasLtMatrixLayoutCreate
-    CreateMatrixLayout(&x_desc, mat_type, M, K, trans_x);
-    CreateMatrixLayout(&y_desc, mat_type, K, N, trans_y);
-    CreateMatrixLayout(&out_desc, mat_type, M, N, false);
-
-    // Config batch size and stride.
-    // note Helper 中没有的
-    if (batch_size > 1) {
-      SetBatchAndStride(x_desc, batch_size, stride_x);
-      SetBatchAndStride(y_desc, batch_size, stride_y);
-      SetBatchAndStride(out_desc, batch_size, stride_out);
+    if (std::is_same<T, int8_t>::value) {
+      out_mat_type = phi::backends::gpu::ToCudaDataType<int32_t>();
+      scale_type = phi::backends::gpu::ToCudaDataType<int32_t>();
     }
-  }
-
-  // x_desc, y_desc, op_desc are allocated in heap memory.
-  template <typename DXT, typename DYT, bool TransX, bool TransY>
-  void Create(
-      const int64_t M,
-      const int64_t N,
-      const int64_t K,
-      const bool trans_x,
-      const bool trans_y,
-      phi::funcs::MatmulPlanner* planner,
-      const int batch_size = 1,
-      const int64_t stride_x = 0,
-      const int64_t stride_y = 0,
-      const int64_t stride_out = 0,
-      bool grad_for_dx = true) {
-    // TODO(yinshangfei)
-    using T = int8_t;
-    using MT = int32_t;
-    cudaDataType_t mat_type = phi::backends::gpu::ToCudaDataType<T>();
-    cudaDataType_t out_mat_type = phi::backends::gpu::ToCudaDataType<int32_t>();
-    cudaDataType_t scale_type = phi::backends::gpu::ToCudaDataType<MT>();
-    cublasComputeType_t compute_type = GetCudaComputeType<T>();
 
     // note 对应 Helper 中构造器的 cublasLtMatmulDescCreate
     // note 调整版本号需要修改
