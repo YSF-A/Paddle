@@ -246,7 +246,51 @@ struct MatmulDescriptor {
     cudaDataType_t scale_type = phi::backends::gpu::ToCudaDataType<MT>();
     cublasComputeType_t compute_type = GetCudaComputeType<T>();
 
-  
+    // note 对应 Helper 中构造器的 cublasLtMatmulDescCreate
+    // note 调整版本号需要修改
+    // Create operation descriptor; see cublasLtMatmulDescAttributes_t for
+    // details about defaults; just need to set the transforms for A and B
+    PADDLE_ENFORCE_GPU_SUCCESS(
+        dynload::cublasLtMatmulDescCreate(&op_desc, compute_type, scale_type));
+    // note 对应 Helper 中构造器的 cublasLtMatmulDescSetAttribute
+    SetFusedEpilogueOpDescriptor(planner, trans_x, trans_y, N);
+
+    // Create matrix descriptors
+    // note 对应 Helper 中cublasLtMatrixLayoutCreate
+    CreateMatrixLayout(&x_desc, mat_type, M, K, trans_x);
+    CreateMatrixLayout(&y_desc, mat_type, K, N, trans_y);
+    CreateMatrixLayout(&out_desc, mat_type, M, N, false);
+
+    // Config batch size and stride.
+    // note Helper 中没有的
+    if (batch_size > 1) {
+      SetBatchAndStride(x_desc, batch_size, stride_x);
+      SetBatchAndStride(y_desc, batch_size, stride_y);
+      SetBatchAndStride(out_desc, batch_size, stride_out);
+    }
+  }
+
+  // x_desc, y_desc, op_desc are allocated in heap memory.
+  template <typename DXT, typename DYT, bool TransX, bool TransY>
+  void Create<int8_t, DXT, DYT, TransX, TransY>(
+      const int64_t M,
+      const int64_t N,
+      const int64_t K,
+      const bool trans_x,
+      const bool trans_y,
+      phi::funcs::MatmulPlanner* planner,
+      const int batch_size = 1,
+      const int64_t stride_x = 0,
+      const int64_t stride_y = 0,
+      const int64_t stride_out = 0,
+      bool grad_for_dx = true) {
+    // TODO(yinshangfei)
+    using T = int8_t;
+    using MT = int32_t;
+    cudaDataType_t mat_type = phi::backends::gpu::ToCudaDataType<T>();
+    cudaDataType_t scale_type = phi::backends::gpu::ToCudaDataType<MT>();
+    cublasComputeType_t compute_type = GetCudaComputeType<T>();
+
     // note 对应 Helper 中构造器的 cublasLtMatmulDescCreate
     // note 调整版本号需要修改
     // Create operation descriptor; see cublasLtMatmulDescAttributes_t for
@@ -473,7 +517,207 @@ struct CublasLtBase {
     phi::Allocator::AllocationPtr workspace = GetWorkspace(ctx, workspace_size);
 
     // note: 对应 Helper中设定算法参数
-    // TODO(yinshangfei) conflict with  MT beta = planner->UseAddTo() ? static_cast<MT>(1) : static_cast<MT>(0);
+    // TODO(yinshangfei) conflict with  MT beta = planner->UseAddTo() ?
+    // static_cast<MT>(1) : static_cast<MT>(0);
+    if (planner != nullptr) {
+      if (phi::autotune::AutoTuneStatus::Instance().UseAutoTune() &&
+          (!desc->is_cached)) {
+        // note 算法参数
+        SearchBestAlgo(ctx,
+                       cublaslt_handle,
+                       desc,
+                       static_cast<void*>(&alpha),
+                       static_cast<void*>(&beta),
+                       y_ptr,
+                       x_ptr,
+                       out_ptr,
+                       workspace->ptr(),
+                       workspace_size);
+        MatmulDescT* best_desc = new MatmulDescT(*desc);
+        VLOG(6) << best_desc->GetDescResultString(
+            "[Searched CublasltDescriptor] ");
+
+        auto& cache = phi::autotune::AutoTuneCache::Instance().GetMatmul();
+        cache.SetSubKey(sub_key, reinterpret_cast<void*>(best_desc));
+      }
+    }
+
+    VLOG(7) << desc->GetDescResultString("[Impl CublasltDescriptor] ");
+    PADDLE_ENFORCE_GPU_SUCCESS(
+        dynload::cublasLtMatmul(cublaslt_handle,
+                                desc->op_desc,
+                                static_cast<void*>(&alpha),
+                                y_ptr,
+                                desc->y_desc,
+                                x_ptr,
+                                desc->x_desc,
+                                static_cast<void*>(&beta),
+                                out_ptr,
+                                desc->out_desc,
+                                out_ptr,
+                                desc->out_desc,
+                                desc->algo,
+                                workspace->ptr(),
+                                workspace_size,
+                                ctx.stream()));
+  }
+
+  static void SearchBestAlgo(const phi::GPUContext& ctx,
+                             const cublasLtHandle_t& lt_handle,
+                             MatmulDescT* desc,
+                             const void* alpha,
+                             const void* beta,
+                             const void* y_data,
+                             const void* x_data,
+                             void* out_data,
+                             void* workspace_ptr,
+                             size_t workspace_size) {
+    cublasLtMatmulPreference_t preference;
+    PADDLE_ENFORCE_GPU_SUCCESS(
+        dynload::cublasLtMatmulPreferenceCreate(&preference));
+    PADDLE_ENFORCE_GPU_SUCCESS(dynload::cublasLtMatmulPreferenceSetAttribute(
+        preference,
+        CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES,
+        &workspace_size,
+        sizeof(workspace_size)));
+
+    int returned_results = 0;
+    constexpr int requested_algo_count = 10;
+    std::vector<cublasLtMatmulHeuristicResult_t> heuristic_results(
+        requested_algo_count);
+    PADDLE_ENFORCE_GPU_SUCCESS(
+        dynload::cublasLtMatmulAlgoGetHeuristic(lt_handle,
+                                                desc->op_desc,
+                                                desc->y_desc,
+                                                desc->x_desc,
+                                                desc->out_desc,
+                                                desc->out_desc,
+                                                preference,
+                                                requested_algo_count,
+                                                heuristic_results.data(),
+                                                &returned_results));
+    PADDLE_ENFORCE_GT(returned_results,
+                      0,
+                      phi::errors::Unavailable("No GEMM algorithm avaliable."));
+    int best_algo_idx = -1;
+    if (returned_results == 1 || FLAGS_cublaslt_exhaustive_search_times <= 0) {
+      best_algo_idx = 0;
+    } else {
+      float min_time_cost = std::numeric_limits<float>::max();
+      for (int algo_idx = 0; algo_idx < returned_results; ++algo_idx) {
+        float cur_time_cost =
+            RunAndMeasureAlgo(ctx,
+                              lt_handle,
+                              desc,
+                              alpha,
+                              beta,
+                              y_data,
+                              x_data,
+                              out_data,
+                              workspace_ptr,
+                              workspace_size,
+                              &(heuristic_results[algo_idx].algo));
+        VLOG(6) << "[MatmulWithCublaslt] algo[" << algo_idx
+                << "] time: " << cur_time_cost << " s";
+
+        if ((best_algo_idx == 0 && (1.05 * cur_time_cost < min_time_cost)) ||
+            (cur_time_cost < min_time_cost)) {
+          best_algo_idx = algo_idx;
+          min_time_cost = cur_time_cost;
+        }
+      }
+    }
+    VLOG(6) << "[MatmulWithCublaslt] best_algo_idx: " << best_algo_idx;
+
+    cublasLtMatmulAlgo_t* best_algo = desc->SetAlgo();
+    *best_algo = heuristic_results[best_algo_idx].algo;
+    PADDLE_ENFORCE_GPU_SUCCESS(
+        dynload::cublasLtMatmulPreferenceDestroy(preference));
+  }
+
+  static float RunAndMeasureAlgo(const phi::GPUContext& ctx,
+                                 const cublasLtHandle_t& lt_handle,
+                                 MatmulDescT* desc,
+                                 const void* alpha,
+                                 const void* beta,
+                                 const void* y_data,
+                                 const void* x_data,
+                                 void* out_data,
+                                 void* workspace_ptr,
+                                 size_t workspace_size,
+                                 cublasLtMatmulAlgo_t* algo) {
+    int repeats = FLAGS_cublaslt_exhaustive_search_times;
+    if (repeats <= 0) {
+      return std::numeric_limits<float>::max();
+    }
+
+    phi::GpuTimer timer;
+    float time_cost = 0.f;
+    const auto& stream = ctx.stream();
+
+    for (int i = 0; i < repeats; ++i) {
+      timer.Start(stream);
+      PADDLE_ENFORCE_GPU_SUCCESS(dynload::cublasLtMatmul(lt_handle,
+                                                         desc->op_desc,
+                                                         alpha,
+                                                         y_data,
+                                                         desc->y_desc,
+                                                         x_data,
+                                                         desc->x_desc,
+                                                         beta,
+                                                         out_data,
+                                                         desc->out_desc,
+                                                         out_data,
+                                                         desc->out_desc,
+                                                         algo,
+                                                         workspace_ptr,
+                                                         workspace_size,
+                                                         stream));
+      timer.Stop(stream);
+      ctx.Wait();
+      auto time = timer.ElapsedTime();
+      if (i > 0) {
+        // Exclude the warmup runtime.
+        time_cost += time;
+      }
+    }
+    return (time_cost / (repeats - 1));
+  }
+};
+
+template <typename OutT = int32_t, class MatmulDescT = MatmulDescriptor>
+struct CublasLtBase<int8_t> {
+ public:
+  using T = int8_t;
+  usint MT = int32_T;
+  static phi::Allocator::AllocationPtr GetWorkspace(const phi::GPUContext& ctx,
+                                                    size_t workspace_size) {
+    return phi::memory_utils::Alloc(
+        ctx.GetPlace(),
+        workspace_size,
+        phi::Stream(reinterpret_cast<phi::StreamId>(ctx.stream())));
+  }
+
+  static void RunImpl(const phi::GPUContext& ctx,
+                      MatmulDescT* desc,
+                      const size_t sub_key,
+                      const T* x_ptr,
+                      const T* y_ptr,
+                      OutT* out_ptr,
+                      phi::funcs::MatmulPlanner* planner) {
+    MT alpha = static_cast<MT>(1);
+    MT beta = planner->UseAddTo() ? static_cast<MT>(1) : static_cast<MT>(0);
+    cublasLtHandle_t cublaslt_handle = ctx.cublaslt_handle();
+
+    // NOTE(limingshu): As workspace_size varies from different DL framework,
+    // I wonder is there any smarter idea for workspace setting, currently I
+    // just followed the settings from the NVIDIA colleague`s setting.
+    size_t workspace_size = static_cast<size_t>(4) * 1024 * 1024;
+    phi::Allocator::AllocationPtr workspace = GetWorkspace(ctx, workspace_size);
+
+    // note: 对应 Helper中设定算法参数
+    // TODO(yinshangfei) conflict with  MT beta = planner->UseAddTo() ?
+    // static_cast<MT>(1) : static_cast<MT>(0);
     if (planner != nullptr) {
       if (phi::autotune::AutoTuneStatus::Instance().UseAutoTune() &&
           (!desc->is_cached)) {
