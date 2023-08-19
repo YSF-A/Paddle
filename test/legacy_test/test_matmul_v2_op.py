@@ -100,8 +100,6 @@ class TestMatMulV2Op(OpTest):
         self.check_output(
             check_cinn=self.check_cinn if hasattr(self, 'check_cinn') else True
         )
-        
-        self.assert_equal('0', '1')
 
     def test_check_grad(self):
         if core.is_compiled_with_rocm():

@@ -259,7 +259,7 @@ struct MatmulDescriptor {
     // note 对应 Helper 中cublasLtMatrixLayoutCreate
     CreateMatrixLayout(&x_desc, mat_type, M, K, trans_x);
     CreateMatrixLayout(&y_desc, mat_type, K, N, trans_y);
-    CreateMatrixLayout(&out_desc, mat_type, M, N, false);
+    CreateMatrixLayout(&out_desc, out_mat_type, M, N, false);
 
     // Config batch size and stride.
     // note Helper 中没有的
@@ -288,6 +288,7 @@ struct MatmulDescriptor {
     using T = int8_t;
     using MT = int32_t;
     cudaDataType_t mat_type = phi::backends::gpu::ToCudaDataType<T>();
+    cudaDataType_t out_mat_type = phi::backends::gpu::ToCudaDataType<int32_t>();
     cudaDataType_t scale_type = phi::backends::gpu::ToCudaDataType<MT>();
     cublasComputeType_t compute_type = GetCudaComputeType<T>();
 
@@ -304,7 +305,7 @@ struct MatmulDescriptor {
     // note 对应 Helper 中cublasLtMatrixLayoutCreate
     CreateMatrixLayout(&x_desc, mat_type, M, K, trans_x);
     CreateMatrixLayout(&y_desc, mat_type, K, N, trans_y);
-    CreateMatrixLayout(&out_desc, mat_type, M, N, false);
+    CreateMatrixLayout(&out_desc, out_mat_type, M, N, false);
 
     // Config batch size and stride.
     // note Helper 中没有的
@@ -686,7 +687,7 @@ struct CublasLtBase {
 };
 
 template <typename OutT = int32_t, class MatmulDescT = MatmulDescriptor>
-struct CublasLtBase<int8_t> {
+struct CublasLtBase<int8_t, OutT, MatmulDescT> {
  public:
   using T = int8_t;
   usint MT = int32_T;
