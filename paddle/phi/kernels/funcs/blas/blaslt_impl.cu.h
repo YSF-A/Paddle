@@ -523,6 +523,20 @@ struct CublasLtBase {
                                 ctx.stream()));
   }
 
+  // static void SetAlgoForInt8(MatmulDescT* desc) {
+  //   int algoId = 21;
+  //   int swizzle = 0;
+  //   int customOption = 0;
+  //   int tile = 15;
+  //   int splitK_val = 0;
+  //   int reductionScheme = 0;
+  //   int stages = 23;
+  //   if (m >= 128) {
+  //     tile = 20;
+  //     stages = 17;
+  //   }
+  // }
+
   static void SearchBestAlgo(const phi::GPUContext& ctx,
                              const cublasLtHandle_t& lt_handle,
                              MatmulDescT* desc,

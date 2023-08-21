@@ -93,6 +93,8 @@ cudaDataType_t ToCudaDataType() {
 #if CUDA_VERSION >= 11060
   } else if (std::is_same<T, int8_t>::value) {
     return CUDA_R_8I;
+  } else if (std::is_same<T, int32_t>::value) {
+    return CUDA_R_32I;
 #endif
   } else {
     PADDLE_THROW(phi::errors::InvalidArgument(
