@@ -127,76 +127,112 @@ class TestMatmulInt8(unittest.TestCase):
         self.input_b_np = np.random.randint(-127, 127, self.y_shape).astype(
             'int32'
         )
+        self.input_a = paddle.to_tensor(self.input_a_np, dtype=self.dtype)
+        self.input_b = paddle.to_tensor(self.input_b_np, dtype=self.dtype)
+        
+        # if self.trans_x:
+        #     if self.input_a_np.ndim == 1:
+        #         self.input_a = paddle.to_tensor(
+        #             self.input_a_np.reshape((self.input_a_np.size, )), 
+        #             dtype=self.dtype)
+        #     elif self.input_a_np.ndim == 2:
+        #         self.input_a = paddle.to_tensor(
+        #             self.input_a_np.T, dtype=self.dtype)
+        #     else:
+        #         dim = list(range(len(self.input_a_np.shape)))
+        #         dim[-1], dim[len(self.input_a_np.shape) - 2] = dim[len(self.input_a_np.shape) - 2], dim[-1]
+        #         self.input_a = paddle.to_tensor(
+        #             np.transpose(self.input_a_np, tuple(dim)), 
+        #             dtype=self.dtype)
+        # else:
+        #     self.input_a = paddle.to_tensor(self.input_a_np, dtype=self.dtype)
+        # if self.trans_y:
+        #     if self.input_b_np.ndim == 1:
+        #         self.input_b = paddle.to_tensor(
+        #             self.input_b_np.reshape((self.input_b_np.size, )), 
+        #             dtype=self.dtype)
+        #     elif self.input_b_np.ndim == 2:
+        #         self.input_b = paddle.to_tensor(
+        #             self.input_b_np.T, dtype=self.dtype)
+        #     else:
+        #         dim = list(range(len(self.input_b_np.shape)))
+        #         dim[-1], dim[len(self.input_b_np.shape) - 2] = dim[len(self.input_b_np.shape) - 2], dim[-1]
+        #         self.input_b = paddle.to_tensor(
+        #             np.transpose(self.input_b_np, tuple(dim)), 
+        #             dtype=self.dtype)
+        #         print("transY")
+        #         print(np.transpose(self.input_b_np, tuple(dim)).shape)
+        # else:
+        #     self.input_b = paddle.to_tensor(self.input_b_np, dtype=self.dtype)
+
+
         if self.trans_x:
             if self.input_a_np.ndim == 1:
-                self.input_a = paddle.to_tensor(
-                    self.input_a_np.reshape((self.input_a_np.size, )), 
-                    dtype=self.dtype)
+                self.input_a_np = self.input_a_np.reshape((self.input_a_np.size, ))
             elif self.input_a_np.ndim == 2:
-                self.input_a = paddle.to_tensor(
-                    self.input_a_np.T, dtype=self.dtype)
+                self.input_a_np = self.input_a_np.T
             else:
                 dim = list(range(len(self.input_a_np.shape)))
                 dim[-1], dim[len(self.input_a_np.shape) - 2] = dim[len(self.input_a_np.shape) - 2], dim[-1]
-                self.input_a = paddle.to_tensor(
-                    self.input_a_np.transpose(self.input_a_np.size, tuple(dim)), 
-                    dtype=self.dtype)
-        else:
-            self.input_a = paddle.to_tensor(self.input_a_np, dtype=self.dtype)
+                self.input_a_np = np.transpose(self.input_a_np, tuple(dim))
         if self.trans_y:
             if self.input_b_np.ndim == 1:
-                self.input_b = paddle.to_tensor(
-                    self.input_b_np.reshape((self.input_b_np.size, )), 
-                    dtype=self.dtype)
+                self.input_b_np = self.input_b_np.reshape((self.input_b_np.size, ))
             elif self.input_b_np.ndim == 2:
-                self.input_b = paddle.to_tensor(
-                    self.input_b_np.T, dtype=self.dtype)
+                self.input_b_np = self.input_b_np.T
             else:
                 dim = list(range(len(self.input_b_np.shape)))
                 dim[-1], dim[len(self.input_b_np.shape) - 2] = dim[len(self.input_b_np.shape) - 2], dim[-1]
-                self.input_b = paddle.to_tensor(
-                    self.input_b_np.transpose(self.input_b_np.size, tuple(dim)), 
-                    dtype=self.dtype)
-        else:
-            self.input_b = paddle.to_tensor(self.input_b_np, dtype=self.dtype)
+                self.input_b_np = np.transpose(self.input_b_np, tuple(dim))
+                print("transY")
+                print(np.transpose(self.input_b_np, tuple(dim)).shape)
+
+        print(self.input_a_np.shape)
+        print(self.input_b_np.shape)
+
+        print("-------------------------------------------")
         
 
     def get_reference_out(self):
         out = np.dot(self.input_a_np, self.input_b_np)
+        
+        print("out.shape")
+        print(out.shape)
         return out
 
     def get_op_out(self):
+        print("trans_y {}".format(self.trans_y))
         out = paddle._C_ops.matmul_int8(self.input_a, self.input_b, self.trans_x, self.trans_y)
         return out.numpy()
 
     def test_matmul_int8(self):
         out_real = self.get_op_out()
         out_expect = self.get_reference_out()
-        # np.testing.assert_allclose(
-        #     out_real, out_expect, rtol=self.rtol, atol=self.atol
-        # )
+        np.testing.assert_allclose(
+            out_real, out_expect, rtol=self.rtol, atol=self.atol
+        )
 
-# class TestMatmulInt8Op2(TestMatmulInt8):
-#     def config(self):
-#         self.dtype = 'int8'
-#         self.rtol = 1e-5
-#         self.atol = 1e-2
-#         self.bias = False
-#         self.x_shape = (100,)
-#         self.y_shape = (1, 3, 2, 100)
-#         self.trans_x = False
-#         self.trans_y = True
+class TestMatmulInt8Op2(TestMatmulInt8):
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (100,)
+        self.y_shape = (1, 3, 2, 100)
+        self.trans_x = False
+        self.trans_y = True
 
-# class TestMatmulInt8Op3(TestMatmulInt8):
-#     def config(self):
-#         self.dtype = 'int8'
-#         self.rtol = 1e-5
-#         self.atol = 1e-2
-#         self.bias = False
-#         self.x_shape = (100,)
-#         self.y_shape = (1, 1, 100, 2)
-#         self.trans_x = False
-#         self.trans_y = False
+class TestMatmulInt8Op3(TestMatmulInt8):
+    def config(self):
+        self.dtype = 'int8'
+        self.rtol = 1e-5
+        self.atol = 1e-2
+        self.bias = False
+        self.x_shape = (2,)
+        self.y_shape = (1, 1, 2, 100)
+        self.trans_x = False
+        self.trans_y = False
 
 # class TestMatmulInt8Op4(TestMatmulInt8):
 #     def config(self):

@@ -29,6 +29,8 @@ limitations under the License. */
 #include "paddle/phi/kernels/autotune/gpu_timer.h"
 #include "paddle/phi/kernels/autotune/switch_autotune.h"
 
+#include <stdio.h>
+
 PHI_DECLARE_int64(cublaslt_exhaustive_search_times);
 #endif
 
@@ -263,6 +265,9 @@ struct MatmulDescriptor {
 
     // Create matrix descriptors
     // note 对应 Helper 中cublasLtMatrixLayoutCreate
+    printf("x_desc M = %d, K=%d, trans_x=%d\n", M, K, int(trans_x));
+    printf("y_desc K = %d, N=%d, trans_y=%d\n", K, N, int(trans_y));
+    printf("out_desc M = %d, N=%d, trans_out=%d\n", M, N, int(false));
     CreateMatrixLayout(&x_desc, mat_type, M, K, trans_x);
     CreateMatrixLayout(&y_desc, mat_type, K, N, trans_y);
     CreateMatrixLayout(&out_desc, out_mat_type, M, N, false);
@@ -660,11 +665,13 @@ struct CublasLtBase {
   }
 };
 
-template <typename OutT, class MatmulDescT>
-struct CublasLtBase<int8_t, OutT, MatmulDescT> {
+template <>
+struct CublasLtBase<int8_t, int32_t, MatmulDescriptor> {
  public:
   using T = int8_t;
   using MT = int32_t;
+  using OutT = int32_t;
+  using MatmulDescT = MatmulDescriptor;
   static phi::Allocator::AllocationPtr GetWorkspace(const phi::GPUContext& ctx,
                                                     size_t workspace_size) {
     return phi::memory_utils::Alloc(
@@ -678,10 +685,12 @@ struct CublasLtBase<int8_t, OutT, MatmulDescT> {
                       const size_t sub_key,
                       const int8_t* x_ptr,
                       const int8_t* y_ptr,
-                      OutT* out_ptr,
+                      int32_t* out_ptr,
                       phi::funcs::MatmulPlanner* planner) {
-    MT alpha = static_cast<MT>(1);
-    MT beta = planner->UseAddTo() ? static_cast<MT>(1) : static_cast<MT>(0);
+    // MT alpha = static_cast<MT>(1);
+    // MT beta = planner->UseAddTo() ? static_cast<MT>(1) : static_cast<MT>(0);
+    int32_t alpha = 1;
+    int32_t beta = 0;
     cublasLtHandle_t cublaslt_handle = ctx.cublaslt_handle();
 
     // NOTE(limingshu): As workspace_size varies from different DL framework,
@@ -717,23 +726,27 @@ struct CublasLtBase<int8_t, OutT, MatmulDescT> {
     }
 
     VLOG(7) << desc->GetDescResultString("[Impl CublasltDescriptor] ");
-    PADDLE_ENFORCE_GPU_SUCCESS(
-        dynload::cublasLtMatmul(cublaslt_handle,
-                                desc->op_desc,
-                                static_cast<void*>(&alpha),
-                                y_ptr,
-                                desc->y_desc,
-                                x_ptr,
-                                desc->x_desc,
-                                static_cast<void*>(&beta),
-                                out_ptr,
-                                desc->out_desc,
-                                out_ptr,
-                                desc->out_desc,
-                                desc->algo,
-                                workspace->ptr(),
-                                workspace_size,
-                                ctx.stream()));
+
+    printf("alpha=%d,", alpha);
+    printf("beta=%d,", beta);
+    printf("\n");
+
+    PADDLE_ENFORCE_GPU_SUCCESS(dynload::cublasLtMatmul(cublaslt_handle,
+                                                       desc->op_desc,
+                                                       &alpha,
+                                                       y_ptr,
+                                                       desc->y_desc,
+                                                       x_ptr,
+                                                       desc->x_desc,
+                                                       &beta,
+                                                       out_ptr,
+                                                       desc->out_desc,
+                                                       out_ptr,
+                                                       desc->out_desc,
+                                                       desc->algo,
+                                                       workspace->ptr(),
+                                                       workspace_size,
+                                                       ctx.stream()));
   }
 
   static void SearchBestAlgo(const phi::GPUContext& ctx,
@@ -931,6 +944,11 @@ struct MatmulWithCublasLt : public CublasLtBase<T, OutT> {
                   phi::funcs::MatmulPlanner* planner = nullptr) {
     auto setter = DescriptorSetter<MatmulDescriptor, T>(
         planner, M, N, K, trans_x, trans_y);
+    if (std::is_same<T, int8_t>::value) {
+      CublasLtBase<T, OutT, MatmulDescriptor>::RunImpl(
+          ctx, &setter.desc, setter.sub_key, x_data, y_data, out_data, planner);
+      return;
+    }
     CublasLtBase<T, OutT>::RunImpl(
         ctx, &setter.desc, setter.sub_key, x_data, y_data, out_data, planner);
   }

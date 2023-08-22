@@ -923,7 +923,7 @@ struct MatMulDispatcher<phi::GPUContext, T> {
                   bool flag = false) {
 #if CUDA_VERSION >= 11060
     auto* tuner = phi::autotune::MakeMatmulTuner<T>(
-        MatMulFunctionImplWithBlas<phi::GPUContext, T>);
+        MatMulFunctionImplWithCublasLt<phi::GPUContext, T>);
     tuner->AddCallBack(MatMulFunctionImplWithCublasLt<phi::GPUContext, T>);
     phi::funcs::MatmulPlanner matmul_planner(x_dims,
                                              y_dims,
@@ -1015,17 +1015,18 @@ void MatMulInt8Function(const Context& ctx,
   using blaslt = phi::funcs::MatmulWithCublasLt<int8_t, int32_t>;
 
   // TODO(yinshangfei) ensure mamtul_planner
-  phi::funcs::MatmulPlanner matmul_planner(x_dims,
-                                           y_dims,
-                                           trans_x,
-                                           trans_y,
-                                           phi::CppTypeToDataType<int8_t>::Type(),
-                                           funcs::MatmulFusedType::kMatmul,
-                                           /* bias_data */ nullptr,
-                                           /* reserve_data */ nullptr,
-                                           /* use_addto */ false,
-                                           /* no_exchange */ true);
-  
+  phi::funcs::MatmulPlanner matmul_planner(
+      x_dims,
+      y_dims,
+      trans_x,
+      trans_y,
+      phi::CppTypeToDataType<int8_t>::Type(),
+      funcs::MatmulFusedType::kMatmul,
+      /* bias_data */ nullptr,
+      /* reserve_data */ nullptr,
+      /* use_addto */ false,
+      /* no_exchange */ true);
+
   if (x_ndim == 1 && y_ndim == 1) {
     const int M = x.numel();
     const int N = y.numel();
@@ -1054,7 +1055,12 @@ void MatMulInt8Function(const Context& ctx,
     return;
   }
 
+  printf("trans_x %d\n", (int)trans_x);
+  printf("trans_y %d\n", (int)trans_y);
+
   if (x_ndim == 1) {
+    printf("x_ndim == 1\n");
+    printf("trans_y = %d\n", int(trans_y));
     const int N = x.numel();
     if (trans_y) {
       PADDLE_ENFORCE_EQ(
@@ -1104,6 +1110,7 @@ void MatMulInt8Function(const Context& ctx,
       const int M = y_dims[y_ndim - 1];
       const int batch_size = y.numel() / (M * N);
       if (batch_size == 1) {
+        printf("M=%d, N=%d, batch_size=%d\n", M, N, -1);
         blaslt::Run(ctx,
                     y_data,
                     x_data,
@@ -1115,6 +1122,7 @@ void MatMulInt8Function(const Context& ctx,
                     false,
                     &matmul_planner);
       } else {
+        printf("M=%d, N=%d, batch_size=%d\n", M, N, batch_size);
         blaslt::RunWithBatch(ctx,
                              y_data,
                              x_data,
