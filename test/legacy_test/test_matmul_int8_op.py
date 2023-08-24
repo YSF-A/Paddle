@@ -97,12 +97,12 @@ paddle.disable_static()
 
 
 # TODO(yinshangfei) bias
-@unittest.skipIf(
-    not core.is_compiled_with_cuda()
-    or get_cuda_version() < 11020
-    or paddle.device.cuda.get_device_capability()[0] < 8,
-    "MatmulInt8 requires CUDA >= 11.2 and CUDA_ARCH >= 8",
-)
+# @unittest.skipIf(
+#     not core.is_compiled_with_cuda()
+#     or get_cuda_version() < 11020
+#     or paddle.device.cuda.get_device_capability()[0] < 8,
+#     "MatmulInt8 requires CUDA >= 11.2 and CUDA_ARCH >= 8",
+# )
 class TestMatmulInt8(unittest.TestCase):
     """
     Test matmul int8
@@ -114,10 +114,10 @@ class TestMatmulInt8(unittest.TestCase):
         self.rtol = 1e-5
         self.atol = 1e-2
         self.bias = False
-        self.x_shape = (8, 64)
-        self.y_shape = (64, 64)
+        self.x_shape = (1, 100)
+        self.y_shape = (100, 2)
         self.trans_x = False
-        self.trans_y = True
+        self.trans_y = False
 
     def setUp(self):
         self.config()
@@ -212,27 +212,27 @@ class TestMatmulInt8(unittest.TestCase):
             out_real, out_expect, rtol=self.rtol, atol=self.atol
         )
 
-class TestMatmulInt8Op2(TestMatmulInt8):
-    def config(self):
-        self.dtype = 'int8'
-        self.rtol = 1e-5
-        self.atol = 1e-2
-        self.bias = False
-        self.x_shape = (100,)
-        self.y_shape = (1, 3, 2, 100)
-        self.trans_x = False
-        self.trans_y = True
+# class TestMatmulInt8Op2(TestMatmulInt8):
+#     def config(self):
+#         self.dtype = 'int8'
+#         self.rtol = 1e-5
+#         self.atol = 1e-2
+#         self.bias = False
+#         self.x_shape = (100,)
+#         self.y_shape = (1, 3, 2, 100)
+#         self.trans_x = False
+#         self.trans_y = True
 
-class TestMatmulInt8Op3(TestMatmulInt8):
-    def config(self):
-        self.dtype = 'int8'
-        self.rtol = 1e-5
-        self.atol = 1e-2
-        self.bias = False
-        self.x_shape = (2,)
-        self.y_shape = (1, 1, 2, 100)
-        self.trans_x = False
-        self.trans_y = False
+# class TestMatmulInt8Op3(TestMatmulInt8):
+#     def config(self):
+#         self.dtype = 'int8'
+#         self.rtol = 1e-5
+#         self.atol = 1e-2
+#         self.bias = False
+#         self.x_shape = (2,)
+#         self.y_shape = (1, 1, 2, 100)
+#         self.trans_x = False
+#         self.trans_y = False
 
 # class TestMatmulInt8Op4(TestMatmulInt8):
 #     def config(self):

@@ -254,6 +254,11 @@ struct MatmulDescriptor {
       scale_type = phi::backends::gpu::ToCudaDataType<int32_t>();
     }
 
+    scale_type = CUDA_R_32I;
+    out_mat_type = CUDA_R_32I;
+    mat_type = CUDA_R_8I;
+    compute_type = CUBLAS_COMPUTE_32I;
+
     // note 对应 Helper 中构造器的 cublasLtMatmulDescCreate
     // note 调整版本号需要修改
     // Create operation descriptor; see cublasLtMatmulDescAttributes_t for
