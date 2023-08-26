@@ -957,6 +957,66 @@ struct DescriptorSetter {
                    int64_t stride_out = 0,
                    const bool no_exchange = true,
                    bool grad_for_dx = true) {
+    if (std::is_same<T, int8_t>::value) {
+      if (trans_x == false && trans_y == false) {
+        PADDLE_ENFORCE_EQ(
+            (N % 4 == 0 || N == 1), 
+            true,
+            phi::errors::InvalidArgument(
+                "The dimension size N used in int8 matmul must be 1 or a multiple of 4 does not "
+                "match the size (%d) currently contained in the container.",
+                N));
+        PADDLE_ENFORCE_EQ(
+            (K % 4 == 0), 
+            true,
+            phi::errors::InvalidArgument(
+                "The dimension size K used in int8 matmul must be a multiple of 4 does not "
+                "match the size (%d) currently contained in the container.",
+                K));
+      }
+      else if (trans_x == false && trans_y == true) {
+        PADDLE_ENFORCE_EQ(
+            (K % 4 == 0), 
+            true,
+            phi::errors::InvalidArgument(
+                "The dimension size K used in int8 matmul must be a multiple of 4 does not "
+                "match the size (%d) currently contained in the container.",
+                K));
+      }
+      else if (trans_x == true && trans_y == false) {
+        PADDLE_ENFORCE_EQ(
+            (M % 4 == 0 || M == 1), 
+            true,
+            phi::errors::InvalidArgument(
+                "The dimension size M used in int8 matmul must be 1 or a multiple of 4 does not "
+                "match the size (%d) currently contained in the container.",
+                M));
+        PADDLE_ENFORCE_EQ(
+            (N % 4 == 0 || N == 1), 
+            true,
+            phi::errors::InvalidArgument(
+                "The dimension size N used in int8 matmul must be 1 or a multiple of 4 does not "
+                "match the size (%d) currently contained in the container.",
+                N));
+      }
+      else {
+        PADDLE_ENFORCE_EQ(
+            (M % 4 == 0 || M == 1), 
+            true,
+            phi::errors::InvalidArgument(
+                "The dimension size M used in int8 matmul must be 1 or a multiple of 4 does not "
+                "match the size (%d) currently contained in the container.",
+                M));
+        PADDLE_ENFORCE_EQ(
+            (K % 4 == 0), 
+            true,
+            phi::errors::InvalidArgument(
+                "The dimension size K used in int8 matmul must be a multiple of 4 does not "
+                "match the size (%d) currently contained in the container.",
+                K));
+      }
+    }
+
     if (planner != nullptr) {
       sub_key = planner->GenSubKey();
     }

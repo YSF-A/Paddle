@@ -212,10 +212,10 @@ class TestMatmulInt8(unittest.TestCase):
         self.rtol = 1e-5
         self.atol = 1e-2
         self.bias = False
-        self.x_shape = (3, 4)
-        self.y_shape = (4, 1)
+        self.x_shape = (8, 64)
+        self.y_shape = (64, 64)
         self.trans_x = False
-        self.trans_y = False
+        self.trans_y = True
 
     def setUp(self):
         self.config()
