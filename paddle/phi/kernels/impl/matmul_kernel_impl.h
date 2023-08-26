@@ -1009,8 +1009,8 @@ void MatMulInt8Functionv2(const Context& ctx,
   const int8_t* x_data = x.data<int8_t>();
   const int8_t* y_data = y.data<int8_t>();
   int M = trans_x ? x_dims[1] : x_dims[0];
-  int N = trans_y ? y_dims[0] : y_dims[1];
   int K = trans_x ? x_dims[0] : x_dims[1];
+  int N = y_dims[0] * y_dims[1] / K;
   
   printf("matmul_kernel_impl:\n");
   printf("M=%d, N=%d, K=%d trans_x = %d trans_y = %d\n", M, N, K, int(trans_x), int(trans_y));
@@ -1057,7 +1057,7 @@ void MatMulInt8Function(const Context& ctx,
           phi::CppTypeToDataType<int8_t>::Type(),
           x.dtype()));
   // TODO(yinshangfei) CUDA VERSION
-#if defined(PADDLE_WITH_CUDA) && CUDA_VERSION >= 11020
+#if defined(PADDLE_WITH_CUDA) && CUDA_VERSION >= 11060
   const int x_ndim = x_dims.size();
   const int y_ndim = y_dims.size();
   const int8_t* x_data = x.data<int8_t>();
@@ -1498,7 +1498,7 @@ void MatmulInt8Kernel(const Context& ctx,
                                    " but reviced dims size is 0. "));
   const std::vector<std::int64_t> x_dims = vectorize(x.dims());
   const std::vector<std::int64_t> y_dims = vectorize(y.dims());
-  MatMulInt8Functionv2<Context>(
+  MatMulInt8Function<Context>(
       ctx, x, y, x_dims, y_dims, out, transpose_x, transpose_y);
 }
 

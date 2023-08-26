@@ -494,22 +494,76 @@ struct CublasLtBase {
       if (phi::autotune::AutoTuneStatus::Instance().UseAutoTune() &&
           (!desc->is_cached)) {
         // note 算法参数
-        SearchBestAlgo(ctx,
-                       cublaslt_handle,
-                       desc,
-                       static_cast<void*>(&alpha),
-                       static_cast<void*>(&beta),
-                       y_ptr,
-                       x_ptr,
-                       out_ptr,
-                       workspace->ptr(),
-                       workspace_size);
-        MatmulDescT* best_desc = new MatmulDescT(*desc);
-        VLOG(6) << best_desc->GetDescResultString(
-            "[Searched CublasltDescriptor] ");
+        // if (std::is_same<T, int8_t>::value) {
 
-        auto& cache = phi::autotune::AutoTuneCache::Instance().GetMatmul();
-        cache.SetSubKey(sub_key, reinterpret_cast<void*>(best_desc));
+        //   int algoId = 21;
+        //   int swizzle = 0;
+        //   int customOption = 0;
+        //   int tile = 15;
+        //   int splitK_val = 0;
+        //   int reductionScheme = 0;
+        //   int stages = 23;
+        //   cublasLtMatmulAlgo_t* best_algo = desc->SetAlgo();
+        //   dynload::cublasLtMatmulAlgoInit(cublaslt_handle,
+        //                         CUBLAS_COMPUTE_32I,
+        //                         CUDA_R_32I,
+        //                         CUDA_R_8I,
+        //                         CUDA_R_8I,
+        //                         CUDA_R_32I,
+        //                         CUDA_R_32I,
+        //                         algoId,
+        //                         &best_algo);
+        //   dynload::cublasLtMatmulAlgoConfigSetAttribute(
+        //                         &best_algo,
+        //                         CUBLASLT_ALGO_CONFIG_CUSTOM_OPTION,
+        //                         &(customOption),
+        //                         sizeof(customOption));
+        //   dynload::cublasLtMatmulAlgoConfigSetAttribute(
+        //                         &best_algo,
+        //                         CUBLASLT_ALGO_CONFIG_TILE_ID,
+        //                         &(tile),
+        //                         sizeof(tile));
+        //   dynload::cublasLtMatmulAlgoConfigSetAttribute(
+        //                         &best_algo,
+        //                         CUBLASLT_ALGO_CONFIG_SPLITK_NUM,
+        //                         &(splitK_val),
+        //                         sizeof(splitK_val));
+        //   dynload::cublasLtMatmulAlgoConfigSetAttribute(
+        //                         &best_algo,
+        //                         CUBLASLT_ALGO_CONFIG_CTA_SWIZZLING,
+        //                         &(swizzle),
+        //                         sizeof(swizzle));
+        //   dynload::cublasLtMatmulAlgoConfigSetAttribute(
+        //                         &best_algo,
+        //                         CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME,
+        //                         &(reductionScheme),
+        //                         sizeof(int));
+        //   dynload::cublasLtMatmulAlgoConfigSetAttribute(
+        //                         &best_algo,
+        //                         CUBLASLT_ALGO_CONFIG_STAGES_ID,
+        //                         &(stages),
+        //                         sizeof(stages));
+        // }
+        // else {
+          
+          SearchBestAlgo(ctx,
+                        cublaslt_handle,
+                        desc,
+                        static_cast<void*>(&alpha),
+                        static_cast<void*>(&beta),
+                        y_ptr,
+                        x_ptr,
+                        out_ptr,
+                        workspace->ptr(),
+                        workspace_size);
+          MatmulDescT* best_desc = new MatmulDescT(*desc);
+          VLOG(6) << best_desc->GetDescResultString(
+              "[Searched CublasltDescriptor] ");
+
+          auto& cache = phi::autotune::AutoTuneCache::Instance().GetMatmul();
+          cache.SetSubKey(sub_key, reinterpret_cast<void*>(best_desc));
+        
+        // }
       }
     }
 
@@ -527,9 +581,9 @@ struct CublasLtBase {
                                 desc->out_desc,
                                 out_ptr,
                                 desc->out_desc,
-                                desc->algo,
-                                workspace->ptr(),
-                                workspace_size,
+                                nullptr,
+                                nullptr,
+                                0,
                                 ctx.stream()));
   }
 
