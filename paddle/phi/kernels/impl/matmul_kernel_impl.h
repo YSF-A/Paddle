@@ -1658,7 +1658,21 @@ void MatmulWithFlattenInt8Kernel(const Context& dev_ctx,
   const DenseTensor y_matrix =
       y.dims().size() > 2 ? phi::ReshapeToMatrix(y, y_num_col_dims) : y;
 
-  dev_ctx.template Alloc<T>(out);
+  PADDLE_ENFORCE_EQ(
+            (y_matrix.dims()[1] % 4 == 0 || y_matrix.dims()[1] == 1), 
+            true,
+            phi::errors::InvalidArgument(
+                "The dimension size N used in int8 matmul_with_flatten must be 1 or a multiple of 4 does not "
+                "match the size (%d) currently contained in the container.",
+                y_matrix.dims()[1]));
+        PADDLE_ENFORCE_EQ(
+            (x_matrix.dims()[1] % 4 == 0), 
+            true,
+            phi::errors::InvalidArgument(
+                "The dimension size K used in int8 matmul_with_flatten must be a multiple of 4 does not "
+                "match the size (%d) currently contained in the container.",
+                x_matrix.dims()[1]));
+
   auto z_dim = out->dims();
   if (z_dim.size() != 2) {
     out->Resize({x_matrix.dims()[0], y_matrix.dims()[1]});
@@ -1676,7 +1690,6 @@ void MatmulWithFlattenInt8Kernel(const Context& dev_ctx,
       y_dims,
       false,
       false,
-      //  TODO(yinshangfei)
       phi::CppTypeToDataType<int8_t>::Type(),
       funcs::MatmulFusedType::kMatmul,
       /* bias_data */ nullptr,
@@ -1684,16 +1697,16 @@ void MatmulWithFlattenInt8Kernel(const Context& dev_ctx,
       /* use_addto */ false,
       /* no_exchange */ true);
 
-  blaslt::Run(ctx,
+  blaslt::Run(dev_ctx,
               x_data,
               y_data,
-              ctx.template Alloc<int32_t>(out),
+              dev_ctx.template Alloc<int32_t>(out),
               x_matrix.dims()[0],
-              y_matrix.dima()[1],
+              y_matrix.dims()[1],
               x_matrix.dims()[1],
               false,
               false,
-              matmul_planner);
+              &matmul_planner);
 
   if (z_dim.size() != 2) {
     out->Resize(z_dim);
