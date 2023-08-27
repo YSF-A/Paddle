@@ -19,6 +19,7 @@ limitations under the License. */
 #include "paddle/phi/kernels/funcs/aligned_vector.h"
 #include "paddle/phi/kernels/funcs/blas/blas.h"
 #include "paddle/phi/kernels/funcs/fc_functor.h"
+#include "paddle/phi/backends/gpu/gpu_launch_config.h"
 
 namespace phi {
 namespace funcs {
@@ -383,9 +384,9 @@ void FCInt8Functor<DeviceContext, T>::operator()(
     int quant_round_type,
     float quant_max_bound,
     float quant_min_bound,
-    const T* B = nullptr,
-    bool relu = false,
-    bool padding_weights = false) {
+    const T* B,
+    bool relu,
+    bool padding_weights) {
   PADDLE_ENFORCE_EQ(padding_weights,
                     false,
                     errors::PermissionDenied(
@@ -393,7 +394,7 @@ void FCInt8Functor<DeviceContext, T>::operator()(
 
   // quant X
   int8_t* quant_x;
-  cudaMalloc(&quant_X, sizeof(int8_t) * M * K);
+  cudaMalloc(&quant_x, sizeof(int8_t) * M * K);
   LaunchQuantKernel(X,
                     quant_x,
                     scale_in,
@@ -402,7 +403,7 @@ void FCInt8Functor<DeviceContext, T>::operator()(
                     quant_round_type,
                     quant_max_bound,
                     quant_min_bound,
-                    dev_ctx_.stream());
+                    context.stream());
 
   int32_t* quant_y;
   // TODO(yinshangfei): int8 gemm
@@ -416,13 +417,13 @@ void FCInt8Functor<DeviceContext, T>::operator()(
 
   // dequant Y
   // TODO(yinshangfei): ensure config
-  GpuLaunchConfig config =
-      phi::backends::gpu::GetGpuLaunchConfig1D(dev_ctx_, M * N, 4);
+  phi::backends::gpu::GpuLaunchConfig config =
+      phi::backends::gpu::GetGpuLaunchConfig1D(context, M * N, 4);
   LaunchDequantKernel(quant_y,
                       Y,
                       M,
                       N,
-                      dev_ctx_.stream(),
+                      context.stream(),
                       &config,
                       scale_in,
                       dequant_out_scale_data);

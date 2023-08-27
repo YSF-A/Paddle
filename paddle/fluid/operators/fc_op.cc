@@ -166,7 +166,7 @@ class FCOpMaker : public framework::OpProtoAndCheckerMaker {
         "(bool, default false) "
         // TODO(yinshangfei): check
         // "This parameter is no longer used. Use 'mkldnn_data_type' instead.")
-        .SetDefault(false);
+        .SetDefault(false));
     AddAttr<std::string>(
         "mkldnn_data_type",
         "(string, default \"float32\"). Data type of mkldnn kernel")
