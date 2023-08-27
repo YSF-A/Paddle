@@ -29,12 +29,8 @@ limitations under the License. */
 #include "paddle/phi/kernels/autotune/gpu_timer.h"
 #include "paddle/phi/kernels/autotune/switch_autotune.h"
 
-#include <stdio.h>
-
 PHI_DECLARE_int64(cublaslt_exhaustive_search_times);
 #endif
-
-// TODO(yinshangfei) there is no initial value for algo
 
 namespace phi {
 namespace funcs {
@@ -230,6 +226,7 @@ struct MatmulDescriptor {
     }
   }
 
+  // TODO(yinshangfei): add OutT
   // x_desc, y_desc, op_desc are allocated in heap memory.
   template <typename T, typename DXT, typename DYT, bool TransX, bool TransY>
   void Create(const int64_t M,
@@ -254,11 +251,6 @@ struct MatmulDescriptor {
       scale_type = phi::backends::gpu::ToCudaDataType<int32_t>();
     }
 
-    scale_type = CUDA_R_32I;
-    out_mat_type = CUDA_R_32I;
-    mat_type = CUDA_R_8I;
-    compute_type = CUBLAS_COMPUTE_32I;
-
     // note 对应 Helper 中构造器的 cublasLtMatmulDescCreate
     // note 调整版本号需要修改
     // Create operation descriptor; see cublasLtMatmulDescAttributes_t for
@@ -270,9 +262,6 @@ struct MatmulDescriptor {
 
     // Create matrix descriptors
     // note 对应 Helper 中cublasLtMatrixLayoutCreate
-    printf("x_desc M = %d, K=%d, trans_x=%d\n", M, K, int(trans_x));
-    printf("y_desc K = %d, N=%d, trans_y=%d\n", K, N, int(trans_y));
-    printf("out_desc M = %d, N=%d, trans_out=%d\n", M, N, int(false));
     CreateMatrixLayout(&x_desc, mat_type, M, K, trans_x);
     CreateMatrixLayout(&y_desc, mat_type, K, N, trans_y);
     CreateMatrixLayout(&out_desc, out_mat_type, M, N, false);
@@ -545,24 +534,24 @@ struct CublasLtBase {
         //                         sizeof(stages));
         // }
         // else {
-          
-          SearchBestAlgo(ctx,
-                        cublaslt_handle,
-                        desc,
-                        static_cast<void*>(&alpha),
-                        static_cast<void*>(&beta),
-                        y_ptr,
-                        x_ptr,
-                        out_ptr,
-                        workspace->ptr(),
-                        workspace_size);
-          MatmulDescT* best_desc = new MatmulDescT(*desc);
-          VLOG(6) << best_desc->GetDescResultString(
-              "[Searched CublasltDescriptor] ");
 
-          auto& cache = phi::autotune::AutoTuneCache::Instance().GetMatmul();
-          cache.SetSubKey(sub_key, reinterpret_cast<void*>(best_desc));
-        
+        SearchBestAlgo(ctx,
+                       cublaslt_handle,
+                       desc,
+                       static_cast<void*>(&alpha),
+                       static_cast<void*>(&beta),
+                       y_ptr,
+                       x_ptr,
+                       out_ptr,
+                       workspace->ptr(),
+                       workspace_size);
+        MatmulDescT* best_desc = new MatmulDescT(*desc);
+        VLOG(6) << best_desc->GetDescResultString(
+            "[Searched CublasltDescriptor] ");
+
+        auto& cache = phi::autotune::AutoTuneCache::Instance().GetMatmul();
+        cache.SetSubKey(sub_key, reinterpret_cast<void*>(best_desc));
+
         // }
       }
     }
@@ -586,20 +575,6 @@ struct CublasLtBase {
                                 0,
                                 ctx.stream()));
   }
-
-  // static void SetAlgoForInt8(MatmulDescT* desc) {
-  //   int algoId = 21;
-  //   int swizzle = 0;
-  //   int customOption = 0;
-  //   int tile = 15;
-  //   int splitK_val = 0;
-  //   int reductionScheme = 0;
-  //   int stages = 23;
-  //   if (m >= 128) {
-  //     tile = 20;
-  //     stages = 17;
-  //   }
-  // }
 
   static void SearchBestAlgo(const phi::GPUContext& ctx,
                              const cublasLtHandle_t& lt_handle,
@@ -727,9 +702,6 @@ struct CublasLtBase {
 template <>
 struct CublasLtBase<int8_t, int32_t, MatmulDescriptor> {
  public:
-  using T = int8_t;
-  using MT = int32_t;
-  using OutT = int32_t;
   using MatmulDescT = MatmulDescriptor;
   static phi::Allocator::AllocationPtr GetWorkspace(const phi::GPUContext& ctx,
                                                     size_t workspace_size) {
@@ -746,8 +718,6 @@ struct CublasLtBase<int8_t, int32_t, MatmulDescriptor> {
                       const int8_t* y_ptr,
                       int32_t* out_ptr,
                       phi::funcs::MatmulPlanner* planner) {
-    // MT alpha = static_cast<MT>(1);
-    // MT beta = planner->UseAddTo() ? static_cast<MT>(1) : static_cast<MT>(0);
     int32_t alpha = 1;
     int32_t beta = 0;
     cublasLtHandle_t cublaslt_handle = ctx.cublaslt_handle();
@@ -785,10 +755,6 @@ struct CublasLtBase<int8_t, int32_t, MatmulDescriptor> {
     }
 
     VLOG(7) << desc->GetDescResultString("[Impl CublasltDescriptor] ");
-
-    printf("alpha=%d,", alpha);
-    printf("beta=%d,", beta);
-    printf("\n");
 
     PADDLE_ENFORCE_GPU_SUCCESS(dynload::cublasLtMatmul(cublaslt_handle,
                                                        desc->op_desc,
@@ -960,58 +926,62 @@ struct DescriptorSetter {
     if (std::is_same<T, int8_t>::value) {
       if (trans_x == false && trans_y == false) {
         PADDLE_ENFORCE_EQ(
-            (N % 4 == 0 || N == 1), 
+            (N % 4 == 0 || N == 1),
             true,
             phi::errors::InvalidArgument(
-                "The dimension size N used in int8 matmul must be 1 or a multiple of 4 does not "
+                "The dimension size N used in int8 matmul must be 1 or a "
+                "multiple of 4 does not "
                 "match the size (%d) currently contained in the container.",
                 N));
         PADDLE_ENFORCE_EQ(
-            (K % 4 == 0), 
+            (K % 4 == 0),
             true,
             phi::errors::InvalidArgument(
-                "The dimension size K used in int8 matmul must be a multiple of 4 does not "
+                "The dimension size K used in int8 matmul must be a multiple "
+                "of 4 does not "
                 "match the size (%d) currently contained in the container.",
                 K));
-      }
-      else if (trans_x == false && trans_y == true) {
+      } else if (trans_x == false && trans_y == true) {
         PADDLE_ENFORCE_EQ(
-            (K % 4 == 0), 
+            (K % 4 == 0),
             true,
             phi::errors::InvalidArgument(
-                "The dimension size K used in int8 matmul must be a multiple of 4 does not "
+                "The dimension size K used in int8 matmul must be a multiple "
+                "of 4 does not "
                 "match the size (%d) currently contained in the container.",
                 K));
-      }
-      else if (trans_x == true && trans_y == false) {
+      } else if (trans_x == true && trans_y == false) {
         PADDLE_ENFORCE_EQ(
-            (M % 4 == 0 || M == 1), 
+            (M % 4 == 0 || M == 1),
             true,
             phi::errors::InvalidArgument(
-                "The dimension size M used in int8 matmul must be 1 or a multiple of 4 does not "
+                "The dimension size M used in int8 matmul must be 1 or a "
+                "multiple of 4 does not "
                 "match the size (%d) currently contained in the container.",
                 M));
         PADDLE_ENFORCE_EQ(
-            (N % 4 == 0 || N == 1), 
+            (N % 4 == 0 || N == 1),
             true,
             phi::errors::InvalidArgument(
-                "The dimension size N used in int8 matmul must be 1 or a multiple of 4 does not "
+                "The dimension size N used in int8 matmul must be 1 or a "
+                "multiple of 4 does not "
                 "match the size (%d) currently contained in the container.",
                 N));
-      }
-      else {
+      } else {
         PADDLE_ENFORCE_EQ(
-            (M % 4 == 0 || M == 1), 
+            (M % 4 == 0 || M == 1),
             true,
             phi::errors::InvalidArgument(
-                "The dimension size M used in int8 matmul must be 1 or a multiple of 4 does not "
+                "The dimension size M used in int8 matmul must be 1 or a "
+                "multiple of 4 does not "
                 "match the size (%d) currently contained in the container.",
                 M));
         PADDLE_ENFORCE_EQ(
-            (K % 4 == 0), 
+            (K % 4 == 0),
             true,
             phi::errors::InvalidArgument(
-                "The dimension size K used in int8 matmul must be a multiple of 4 does not "
+                "The dimension size K used in int8 matmul must be a multiple "
+                "of 4 does not "
                 "match the size (%d) currently contained in the container.",
                 K));
       }
@@ -1063,11 +1033,6 @@ struct MatmulWithCublasLt : public CublasLtBase<T, OutT> {
                   phi::funcs::MatmulPlanner* planner = nullptr) {
     auto setter = DescriptorSetter<MatmulDescriptor, T>(
         planner, M, N, K, trans_x, trans_y);
-    if (std::is_same<T, int8_t>::value) {
-      CublasLtBase<T, OutT, MatmulDescriptor>::RunImpl(
-          ctx, &setter.desc, setter.sub_key, x_data, y_data, out_data, planner);
-      return;
-    }
     CublasLtBase<T, OutT>::RunImpl(
         ctx, &setter.desc, setter.sub_key, x_data, y_data, out_data, planner);
   }

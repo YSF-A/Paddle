@@ -14,7 +14,6 @@ limitations under the License. */
 
 #pragma once
 
-#include <stdio.h>
 #include "glog/logging.h"
 
 #include "paddle/phi/common/memory_utils.h"
@@ -923,7 +922,7 @@ struct MatMulDispatcher<phi::GPUContext, T> {
                   bool flag = false) {
 #if CUDA_VERSION >= 11060
     auto* tuner = phi::autotune::MakeMatmulTuner<T>(
-        MatMulFunctionImplWithCublasLt<phi::GPUContext, T>);
+        MatMulFunctionImplWithBlas<phi::GPUContext, T>);
     tuner->AddCallBack(MatMulFunctionImplWithCublasLt<phi::GPUContext, T>);
     phi::funcs::MatmulPlanner matmul_planner(x_dims,
                                              y_dims,
@@ -954,15 +953,6 @@ struct MatMulDispatcher<phi::GPUContext, T> {
   }
 };
 
-// TODO(yinshangfei) delete unused func
-static phi::Allocator::AllocationPtr GetWorkspace(const phi::GPUContext& ctx,
-                                                  size_t workspace_size) {
-  return phi::memory_utils::Alloc(
-      ctx.GetPlace(),
-      workspace_size,
-      phi::Stream(reinterpret_cast<phi::StreamId>(ctx.stream())));
-}
-
 #endif  // PADDLE_WITH_CUDA
 
 template <typename Context, typename T>
@@ -977,61 +967,6 @@ void MatMulFunction(const Context& ctx,
                     bool flag = false) {
   MatMulDispatcher<Context, T>()(
       ctx, x, y, x_dims, y_dims, out, trans_x, trans_y, flag);
-}
-
-template <typename Context>
-void MatMulInt8Functionv2(const Context& ctx,
-                          const DenseTensor& x,
-                          const DenseTensor& y,
-                          const std::vector<std::int64_t>& x_dims,
-                          const std::vector<std::int64_t>& y_dims,
-                          DenseTensor* out,
-                          bool trans_x,
-                          bool trans_y) {
-#if defined(PADDLE_WITH_CUDA) && CUDA_VERSION >= 11020
-  using blaslt = phi::funcs::MatmulWithCublasLt<int8_t, int32_t>;
-
-  // TODO(yinshangfei) ensure mamtul_planner
-  phi::funcs::MatmulPlanner matmul_planner(
-      x_dims,
-      y_dims,
-      trans_x,
-      trans_y,
-      phi::CppTypeToDataType<int8_t>::Type(),
-      funcs::MatmulFusedType::kMatmul,
-      /* bias_data */ nullptr,
-      /* reserve_data */ nullptr,
-      /* use_addto */ false,
-      /* no_exchange */ true);
-
-  const int x_ndim = x_dims.size();
-  const int y_ndim = y_dims.size();
-  const int8_t* x_data = x.data<int8_t>();
-  const int8_t* y_data = y.data<int8_t>();
-  int M = trans_x ? x_dims[1] : x_dims[0];
-  int K = trans_x ? x_dims[0] : x_dims[1];
-  int N = y_dims[0] * y_dims[1] / K;
-
-  printf("matmul_kernel_impl:\n");
-  printf("M=%d, N=%d, K=%d trans_x = %d trans_y = %d\n",
-         M,
-         N,
-         K,
-         int(trans_x),
-         int(trans_y));
-
-  blaslt::Run(ctx,
-              x_data,
-              y_data,
-              ctx.template Alloc<int32_t>(out),
-              M,
-              N,
-              K,
-              trans_x,
-              trans_y,
-              &matmul_planner);
-
-#endif
 }
 
 template <typename Context>
@@ -1061,7 +996,7 @@ void MatMulInt8Function(const Context& ctx,
           "type of data (%s) currently contained in the container.",
           phi::CppTypeToDataType<int8_t>::Type(),
           x.dtype()));
-  // TODO(yinshangfei) CUDA VERSION
+  // TODO(yinshangfei) ensure the supported CUDA VERSION
 #if defined(PADDLE_WITH_CUDA) && CUDA_VERSION >= 11060
   const int x_ndim = x_dims.size();
   const int y_ndim = y_dims.size();
@@ -1069,7 +1004,6 @@ void MatMulInt8Function(const Context& ctx,
   const int8_t* y_data = y.data<int8_t>();
   using blaslt = phi::funcs::MatmulWithCublasLt<int8_t, int32_t>;
 
-  // TODO(yinshangfei) ensure mamtul_planner
   phi::funcs::MatmulPlanner matmul_planner(
       x_dims,
       y_dims,
@@ -1117,13 +1051,7 @@ void MatMulInt8Function(const Context& ctx,
                 &matmul_planner);
     return;
   }
-
-  printf("trans_x %d\n", (int)trans_x);
-  printf("trans_y %d\n", (int)trans_y);
-
   if (x_ndim == 1) {
-    printf("x_ndim == 1\n");
-    printf("trans_y = %d\n", int(trans_y));
     const int N = x.numel();
     if (trans_y) {
       PADDLE_ENFORCE_EQ(
@@ -1190,7 +1118,6 @@ void MatMulInt8Function(const Context& ctx,
       const int M = y_dims[y_ndim - 1];
       const int batch_size = y.numel() / (M * N);
       if (batch_size == 1) {
-        printf("M=%d, N=%d, batch_size=%d\n", M, N, -1);
         blaslt::Run(ctx,
                     y_data,
                     x_data,
@@ -1202,7 +1129,6 @@ void MatMulInt8Function(const Context& ctx,
                     false,
                     &matmul_planner);
       } else {
-        printf("M=%d, N=%d, batch_size=%d\n", M, N, batch_size);
         blaslt::RunWithBatch(ctx,
                              y_data,
                              x_data,
@@ -1603,7 +1529,6 @@ void MatmulInt8Kernel(const Context& ctx,
                       bool transpose_x,
                       bool transpose_y,
                       DenseTensor* out) {
-  printf("MatmulInt8Kernel %d %d\n", transpose_x, transpose_y);
   PADDLE_ENFORCE_NE(
       phi::product(x.dims()),
       0,
@@ -1658,7 +1583,23 @@ void MatmulWithFlattenInt8Kernel(const Context& dev_ctx,
   const DenseTensor y_matrix =
       y.dims().size() > 2 ? phi::ReshapeToMatrix(y, y_num_col_dims) : y;
 
-  dev_ctx.template Alloc<T>(out);
+  PADDLE_ENFORCE_EQ(
+      (y_matrix.dims()[1] % 4 == 0 || y_matrix.dims()[1] == 1),
+      true,
+      phi::errors::InvalidArgument(
+          "The dimension size N used in int8 matmul_with_flatten must be 1 or "
+          "a multiple of 4 does not "
+          "match the size (%d) currently contained in the container.",
+          y_matrix.dims()[1]));
+  PADDLE_ENFORCE_EQ(
+      (x_matrix.dims()[1] % 4 == 0),
+      true,
+      phi::errors::InvalidArgument(
+          "The dimension size K used in int8 matmul_with_flatten must be a "
+          "multiple of 4 does not "
+          "match the size (%d) currently contained in the container.",
+          x_matrix.dims()[1]));
+
   auto z_dim = out->dims();
   if (z_dim.size() != 2) {
     out->Resize({x_matrix.dims()[0], y_matrix.dims()[1]});
@@ -1671,28 +1612,28 @@ void MatmulWithFlattenInt8Kernel(const Context& dev_ctx,
 
   std::vector<std::int64_t> x_dims = {x_matrix.dims()[0], x_matrix.dims()[1]};
   std::vector<std::int64_t> y_dims = {y_matrix.dims()[0], y_matrix.dims()[1]};
-  phi::funcs::MatmulPlanner matmul_planner(x_dims,
-                                           y_dims,
-                                           false,
-                                           false,
-                                           //  TODO(yinshangfei)
-                                           phi::CppTypeToDataType<T>::Type(),
-                                           funcs::MatmulFusedType::kMatmul,
-                                           /* bias_data */ nullptr,
-                                           /* reserve_data */ nullptr,
-                                           /* use_addto */ false,
-                                           /* no_exchange */ true);
+  phi::funcs::MatmulPlanner matmul_planner(
+      x_dims,
+      y_dims,
+      false,
+      false,
+      phi::CppTypeToDataType<int8_t>::Type(),
+      funcs::MatmulFusedType::kMatmul,
+      /* bias_data */ nullptr,
+      /* reserve_data */ nullptr,
+      /* use_addto */ false,
+      /* no_exchange */ true);
 
-  blaslt::Run(ctx,
+  blaslt::Run(dev_ctx,
               x_data,
               y_data,
-              ctx.template Alloc<int32_t>(out),
+              dev_ctx.template Alloc<int32_t>(out),
               x_matrix.dims()[0],
-              y_matrix.dima()[1],
+              y_matrix.dims()[1],
               x_matrix.dims()[1],
               false,
               false,
-              matmul_planner);
+              &matmul_planner);
 
   if (z_dim.size() != 2) {
     out->Resize(z_dim);
