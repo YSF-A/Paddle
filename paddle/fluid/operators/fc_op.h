@@ -19,6 +19,7 @@ limitations under the License. */
 
 #include "paddle/fluid/framework/op_registry.h"
 #include "paddle/phi/kernels/funcs/fc_functor.h"
+#include "paddle/phi/core/device_context.h"
 
 namespace paddle {
 namespace operators {
@@ -85,7 +86,7 @@ class FCOpKernel : public framework::OpKernel<T> {
         dev_ctx.template Alloc<T>(output, output->numel() * sizeof(T));
 
     auto use_quantizer = ctx.Attr<bool>("use_quantizer");
-    if (use_quantizer) {
+    if (use_quantizer && std::is_same<DeviceContext, phi::GPUContext>::value) {
       auto scale_in = ctx.Attr<float>("Scale_in");
       auto scale_weights = ctx.Attr<std::vector<float>>("Scale_weights");
       auto quant_round_type = ctx.Attr<int>("quant_round_type");
