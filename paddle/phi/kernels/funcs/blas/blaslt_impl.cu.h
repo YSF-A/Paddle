@@ -29,8 +29,6 @@ limitations under the License. */
 #include "paddle/phi/kernels/autotune/gpu_timer.h"
 #include "paddle/phi/kernels/autotune/switch_autotune.h"
 
-#include <stdio.h>
-
 PHI_DECLARE_int64(cublaslt_exhaustive_search_times);
 #endif
 
