@@ -2249,10 +2249,11 @@ void MatmulWithFlattenInt8InferMeta(const MetaTensor& x,
   auto x_dims = x.dims();
   auto y_dims = y.dims();
 
-  VLOG(3) << "mul operator x.shape=" << x_dims << " y.shape=" << y_dims
+  VLOG(3) << "int8 mul operator x.shape=" << x_dims << " y.shape=" << y_dims
           << " x_num_col_dims=" << x_num_col_dims
           << " y_num_col_dims=" << y_num_col_dims;
 
+  // TODO(yinshangfei)
   PADDLE_ENFORCE_NE(phi::product(y_dims),
                     0,
                     phi::errors::PreconditionNotMet(
@@ -2264,7 +2265,7 @@ void MatmulWithFlattenInt8InferMeta(const MetaTensor& x,
       x_dims.size(),
       x_num_col_dims,
       phi::errors::InvalidArgument(
-          "The input tensor X's dimensions of MulOp "
+          "The input tensor X's dimensions of int8 MulOp "
           "should be larger than x_num_col_dims. But received X's "
           "dimensions = %d, X's shape = [%s], x_num_col_dims = %d.",
           x_dims.size(),
@@ -2274,7 +2275,7 @@ void MatmulWithFlattenInt8InferMeta(const MetaTensor& x,
       y_dims.size(),
       y_num_col_dims,
       phi::errors::InvalidArgument(
-          "The input tensor Y's dimensions of MulOp "
+          "The input tensor Y's dimensions of int8 MulOp "
           "should be larger than y_num_col_dims. But received Y's "
           "dimensions = %d, Y's shape = [%s], y_num_col_dims = %d.",
           y_dims.size(),

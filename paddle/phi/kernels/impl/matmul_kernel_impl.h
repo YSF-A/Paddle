@@ -1671,17 +1671,18 @@ void MatmulWithFlattenInt8Kernel(const Context& dev_ctx,
 
   std::vector<std::int64_t> x_dims = {x_matrix.dims()[0], x_matrix.dims()[1]};
   std::vector<std::int64_t> y_dims = {y_matrix.dims()[0], y_matrix.dims()[1]};
-  phi::funcs::MatmulPlanner matmul_planner(x_dims,
-                                           y_dims,
-                                           false,
-                                           false,
-                                           //  TODO(yinshangfei)
-                                           phi::CppTypeToDataType<T>::Type(),
-                                           funcs::MatmulFusedType::kMatmul,
-                                           /* bias_data */ nullptr,
-                                           /* reserve_data */ nullptr,
-                                           /* use_addto */ false,
-                                           /* no_exchange */ true);
+  phi::funcs::MatmulPlanner matmul_planner(
+      x_dims,
+      y_dims,
+      false,
+      false,
+      //  TODO(yinshangfei)
+      phi::CppTypeToDataType<int8_t>::Type(),
+      funcs::MatmulFusedType::kMatmul,
+      /* bias_data */ nullptr,
+      /* reserve_data */ nullptr,
+      /* use_addto */ false,
+      /* no_exchange */ true);
 
   blaslt::Run(ctx,
               x_data,
