@@ -16,10 +16,10 @@ limitations under the License. */
 
 #include "paddle/fluid/operators/fused/quant_dequant_kernel.h"
 #include "paddle/phi/backends/all_context.h"
+#include "paddle/phi/backends/gpu/gpu_launch_config.h"
 #include "paddle/phi/kernels/funcs/aligned_vector.h"
 #include "paddle/phi/kernels/funcs/blas/blas.h"
 #include "paddle/phi/kernels/funcs/fc_functor.h"
-#include "paddle/phi/backends/gpu/gpu_launch_config.h"
 
 namespace phi {
 namespace funcs {
@@ -392,6 +392,7 @@ void FCInt8Functor<DeviceContext, T>::operator()(
                     errors::PermissionDenied(
                         "Weight padding in fc can not be used in GPU scope."));
 
+  // TODO: memory management.
   // quant X
   int8_t* quant_x;
   cudaMalloc(&quant_x, sizeof(int8_t) * M * K);
@@ -409,7 +410,6 @@ void FCInt8Functor<DeviceContext, T>::operator()(
   // TODO(yinshangfei): int8 gemm
 
   // calculate quant out scale
-  // TODO(yinshangfei): quant_dequant_helper 感觉有问题
   float* dequant_out_scale_data = (float*)malloc(sizeof(float) * N);
   for (int i = 0; i < N; ++i) {
     dequant_out_scale_data[i] = scale_in * scale_weights[i];

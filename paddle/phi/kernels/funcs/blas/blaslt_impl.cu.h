@@ -251,23 +251,18 @@ struct MatmulDescriptor {
       scale_type = phi::backends::gpu::ToCudaDataType<int32_t>();
     }
 
-    // note 对应 Helper 中构造器的 cublasLtMatmulDescCreate
-    // note 调整版本号需要修改
     // Create operation descriptor; see cublasLtMatmulDescAttributes_t for
     // details about defaults; just need to set the transforms for A and B
     PADDLE_ENFORCE_GPU_SUCCESS(
         dynload::cublasLtMatmulDescCreate(&op_desc, compute_type, scale_type));
-    // note 对应 Helper 中构造器的 cublasLtMatmulDescSetAttribute
     SetFusedEpilogueOpDescriptor(planner, trans_x, trans_y, N);
 
     // Create matrix descriptors
-    // note 对应 Helper 中cublasLtMatrixLayoutCreate
     CreateMatrixLayout(&x_desc, mat_type, M, K, trans_x);
     CreateMatrixLayout(&y_desc, mat_type, K, N, trans_y);
     CreateMatrixLayout(&out_desc, out_mat_type, M, N, false);
 
     // Config batch size and stride.
-    // note Helper 中没有的
     if (batch_size > 1) {
       SetBatchAndStride(x_desc, batch_size, stride_x);
       SetBatchAndStride(y_desc, batch_size, stride_y);
@@ -476,65 +471,10 @@ struct CublasLtBase {
     size_t workspace_size = static_cast<size_t>(4) * 1024 * 1024;
     phi::Allocator::AllocationPtr workspace = GetWorkspace(ctx, workspace_size);
 
-    // note: 对应 Helper中设定算法参数
     // TODO(yinshangfei) conflict with  MT beta = planner->UseAddTo() ?
-    // static_cast<MT>(1) : static_cast<MT>(0);
     if (planner != nullptr) {
       if (phi::autotune::AutoTuneStatus::Instance().UseAutoTune() &&
           (!desc->is_cached)) {
-        // note 算法参数
-        // if (std::is_same<T, int8_t>::value) {
-
-        //   int algoId = 21;
-        //   int swizzle = 0;
-        //   int customOption = 0;
-        //   int tile = 15;
-        //   int splitK_val = 0;
-        //   int reductionScheme = 0;
-        //   int stages = 23;
-        //   cublasLtMatmulAlgo_t* best_algo = desc->SetAlgo();
-        //   dynload::cublasLtMatmulAlgoInit(cublaslt_handle,
-        //                         CUBLAS_COMPUTE_32I,
-        //                         CUDA_R_32I,
-        //                         CUDA_R_8I,
-        //                         CUDA_R_8I,
-        //                         CUDA_R_32I,
-        //                         CUDA_R_32I,
-        //                         algoId,
-        //                         &best_algo);
-        //   dynload::cublasLtMatmulAlgoConfigSetAttribute(
-        //                         &best_algo,
-        //                         CUBLASLT_ALGO_CONFIG_CUSTOM_OPTION,
-        //                         &(customOption),
-        //                         sizeof(customOption));
-        //   dynload::cublasLtMatmulAlgoConfigSetAttribute(
-        //                         &best_algo,
-        //                         CUBLASLT_ALGO_CONFIG_TILE_ID,
-        //                         &(tile),
-        //                         sizeof(tile));
-        //   dynload::cublasLtMatmulAlgoConfigSetAttribute(
-        //                         &best_algo,
-        //                         CUBLASLT_ALGO_CONFIG_SPLITK_NUM,
-        //                         &(splitK_val),
-        //                         sizeof(splitK_val));
-        //   dynload::cublasLtMatmulAlgoConfigSetAttribute(
-        //                         &best_algo,
-        //                         CUBLASLT_ALGO_CONFIG_CTA_SWIZZLING,
-        //                         &(swizzle),
-        //                         sizeof(swizzle));
-        //   dynload::cublasLtMatmulAlgoConfigSetAttribute(
-        //                         &best_algo,
-        //                         CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME,
-        //                         &(reductionScheme),
-        //                         sizeof(int));
-        //   dynload::cublasLtMatmulAlgoConfigSetAttribute(
-        //                         &best_algo,
-        //                         CUBLASLT_ALGO_CONFIG_STAGES_ID,
-        //                         &(stages),
-        //                         sizeof(stages));
-        // }
-        // else {
-
         SearchBestAlgo(ctx,
                        cublaslt_handle,
                        desc,
@@ -551,8 +491,6 @@ struct CublasLtBase {
 
         auto& cache = phi::autotune::AutoTuneCache::Instance().GetMatmul();
         cache.SetSubKey(sub_key, reinterpret_cast<void*>(best_desc));
-
-        // }
       }
     }
 
@@ -728,13 +666,10 @@ struct CublasLtBase<int8_t, int32_t, MatmulDescriptor> {
     size_t workspace_size = static_cast<size_t>(4) * 1024 * 1024;
     phi::Allocator::AllocationPtr workspace = GetWorkspace(ctx, workspace_size);
 
-    // note: 对应 Helper中设定算法参数
     // TODO(yinshangfei) conflict with  MT beta = planner->UseAddTo() ?
-    // static_cast<MT>(1) : static_cast<MT>(0);
     if (planner != nullptr) {
       if (phi::autotune::AutoTuneStatus::Instance().UseAutoTune() &&
           (!desc->is_cached)) {
-        // note 算法参数
         SearchBestAlgo(ctx,
                        cublaslt_handle,
                        desc,
@@ -897,8 +832,6 @@ struct CublasLtBase<int8_t, int32_t, MatmulDescriptor> {
   }
 };
 
-// TODO(yinshangfei): should adjust for null planner or not?
-// TODO(yinshangfei): whether add Out type
 // To judge if desc is cached or not.
 template <class DescT,
           typename T,
