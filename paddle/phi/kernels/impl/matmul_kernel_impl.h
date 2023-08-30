@@ -996,7 +996,6 @@ void MatMulInt8Function(const Context& ctx,
           "type of data (%s) currently contained in the container.",
           phi::CppTypeToDataType<int8_t>::Type(),
           x.dtype()));
-  // TODO(yinshangfei) ensure the supported CUDA VERSION
 #if defined(PADDLE_WITH_CUDA) && CUDA_VERSION >= 11060
   const int x_ndim = x_dims.size();
   const int y_ndim = y_dims.size();

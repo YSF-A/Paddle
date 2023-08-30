@@ -2253,7 +2253,6 @@ void MatmulWithFlattenInt8InferMeta(const MetaTensor& x,
           << " x_num_col_dims=" << x_num_col_dims
           << " y_num_col_dims=" << y_num_col_dims;
 
-  // TODO(yinshangfei)
   PADDLE_ENFORCE_NE(phi::product(y_dims),
                     0,
                     phi::errors::PreconditionNotMet(
