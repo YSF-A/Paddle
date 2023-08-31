@@ -1429,12 +1429,12 @@ MatmulJudgeDtypeKernel(const Context& ctx,
   if (try_cublasLt) {
     return;
   }
-  auto x_tmp = phi::Cast<T, Context>(ctx, x, phi::DataType::FLOAT32);
-  auto y_tmp = phi::Cast<T, Context>(ctx, y, phi::DataType::FLOAT32);
-  DenseTensor out_tmp;
-  MatMulFunction<Context, float>(
-      ctx, x_tmp, y_tmp, x_dims, y_dims, &out_tmp, transpose_x, transpose_y);
-  phi::CastKernel<float>(ctx, out_tmp, x.dtype(), out);
+  // auto x_tmp = phi::Cast<T, Context>(ctx, x, phi::DataType::FLOAT32);
+  // auto y_tmp = phi::Cast<T, Context>(ctx, y, phi::DataType::FLOAT32);
+  // DenseTensor out_tmp;
+  // MatMulFunction<Context, float>(
+  //     ctx, x_tmp, y_tmp, x_dims, y_dims, &out_tmp, transpose_x, transpose_y);
+  // phi::CastKernel<float>(ctx, out_tmp, x.dtype(), out);
 }
 
 template <typename Context, typename T>
