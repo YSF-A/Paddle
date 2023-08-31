@@ -76,7 +76,7 @@ class TestMatmulInt8(unittest.TestCase):
         return out
 
     def get_op_out(self):
-        out = paddle._C_ops.matmul_int8(self.input_a, self.input_b, self.trans_x, self.trans_y)
+        out = paddle._C_ops.matmul(self.input_a, self.input_b, self.trans_x, self.trans_y)
         return out.numpy()
 
     def test_matmul_int8(self):
