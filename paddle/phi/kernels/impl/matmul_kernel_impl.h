@@ -1031,7 +1031,7 @@ bool MatMulInt8Function(const Context& ctx,
                 false,
                 true,
                 &matmul_planner);
-    return;
+    return true;
   }
   if (x_ndim == 1) {
     const int N = x.numel();
@@ -1117,7 +1117,7 @@ bool MatMulInt8Function(const Context& ctx,
                              &matmul_planner);
       }
     }
-    return;
+    return true;
   }
 
   if (y_ndim == 1) {
@@ -1205,7 +1205,7 @@ bool MatMulInt8Function(const Context& ctx,
                   false,
                   &matmul_planner);
     }
-    return;
+    return true;
   }
 
   const int M = trans_x ? x_dims[x_ndim - 1] : x_dims[x_ndim - 2];
@@ -1273,7 +1273,7 @@ bool MatMulInt8Function(const Context& ctx,
                       out_broadcast_dims.cbegin() + batch_dim,
                       1LL,
                       std::multiplies<std::int64_t>());
-  if (out_batch_size == 0) return;
+  if (out_batch_size == 0) return true;
 
   if (x_batch_size == 1 && M == 1 && trans_y) {
     if (!(K % 4 == 0)) {
@@ -1408,10 +1408,9 @@ bool MatMulInt8Function(const Context& ctx,
                          out_batch_size,
                          &matmul_planner);
   }
-
+  return true;
 #else
-  PADDLE_THROW(phi::errors::Unimplemented(
-      "MatmulInt8 op needs paddle with cuda and cuda version >= 11.6"));
+  return false;
 #endif
 }
 
