@@ -44,10 +44,5 @@ PD_REGISTER_KERNEL(matmul_with_flatten,
                    float,
                    double,
                    phi::dtype::bfloat16,
-                   phi::dtype::float16) {}
-
-PD_REGISTER_KERNEL(matmul_with_flatten_int8,
-                   GPU,
-                   ALL_LAYOUT,
-                   phi::MatmulWithFlattenInt8Kernel,
+                   phi::dtype::float16,
                    int8_t) {}
