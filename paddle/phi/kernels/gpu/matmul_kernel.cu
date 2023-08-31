@@ -30,8 +30,8 @@ PD_REGISTER_KERNEL(matmul,
                    phi::dtype::complex<float>,
                    phi::dtype::complex<double>,
                    int8_t) {
-  if (kernel_key.dtype() == int8_t) {
-    kernel->OutputAt(0).SetDataType(int32_t);
+  if (kernel_key.dtype() == phi::DataType::INT8) {
+    kernel->OutputAt(0).SetDataType(phi::DataType::INT32);
   }
 }
 
