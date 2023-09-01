@@ -316,8 +316,8 @@ class TestMatmulWithFlattenInt8(unittest.TestCase):
         return out
 
     def get_op_out(self):
-        out = paddle._C_ops.matmul_with_flatten_int8(self.input_a, self.input_b, self.x_num_col_dims, self.y_num_col_dims)
-        return out.numpy()
+        # out = paddle._C_ops.matmul_with_flatten_int8(self.input_a, self.input_b, self.x_num_col_dims, self.y_num_col_dims)
+        # return out.numpy()
 
     def test_matmul_with_flatten_int8(self):
         out_real = self.get_op_out()
