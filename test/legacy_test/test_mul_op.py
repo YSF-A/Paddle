@@ -311,11 +311,11 @@ class TestMulBF16Op2(TestMulBF16Op1):
             check_dygraph=False,
         )
 
-# TODO: verif the requirments of CUDA ARC
+# TODO: verify the requirments of CUDA ARCH
 @unittest.skipIf(
     not core.is_compiled_with_cuda()
     or get_cuda_version() < 11060,
-    "MatmulInt8 requires CUDA >= 11.6 and CUDA_ARCH >= 8",
+    "MatmulInt8 requires CUDA >= 11.6",
 )
 class TestMulInt8Op(OpTest):
     def setUp(self):

@@ -23,11 +23,11 @@ from paddle.fluid import core
 paddle.disable_static()
 
 
-# TODO: verify the test with CUDA_ARCH >= 8
+# TODO: verify the requirments of CUDA ARCH
 @unittest.skipIf(
     not core.is_compiled_with_cuda()
     or get_cuda_version() < 11060,
-    "MatmulInt8 requires CUDA >= 11.6 and CUDA_ARCH >= 8",
+    "MatmulInt8 requires CUDA >= 11.6",
 )
 class TestMatmulInt8(unittest.TestCase):
 
