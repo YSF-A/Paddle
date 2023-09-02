@@ -44,7 +44,8 @@ PD_REGISTER_KERNEL(matmul_with_flatten,
                    float,
                    double,
                    phi::dtype::bfloat16,
-                   phi::dtype::float16) {
+                   phi::dtype::float16,
+                   int8_t) {
   if (kernel_key.dtype() == phi::DataType::INT8) {
     kernel->OutputAt(0).SetDataType(phi::DataType::INT32);
   }
