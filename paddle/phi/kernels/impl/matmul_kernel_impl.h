@@ -991,10 +991,6 @@ bool inline MatMulInt8Function(const phi::GPUContext& ctx,
                                DenseTensor* out,
                                bool trans_x,
                                bool trans_y) {
-  using Context = phi::GPUContext;
-  if (!std::is_same<Context, phi::GPUContext>::value) {
-    return false;
-  }
   if (x.dtype() != DataType::INT8 || y.dtype() != DataType::INT8) {
     return false;
   }
@@ -1428,19 +1424,6 @@ bool inline MatMulInt8Function(const phi::GPUContext& ctx,
 #endif
 }
 
-// template <>
-// bool inline MatMulInt8Function<phi::CPUContext>(
-//     const phi::CPUContext& ctx,
-//     const DenseTensor& x,
-//     const DenseTensor& y,
-//     const std::vector<std::int64_t>& x_dims,
-//     const std::vector<std::int64_t>& y_dims,
-//     DenseTensor* out,
-//     bool trans_x,
-//     bool trans_y) {
-//   return false;
-// }
-
 template <typename Context, typename T>
 typename std::enable_if<std::is_integral<T>::value>::type
 MatmulJudgeDtypeKernel(const Context& ctx,
@@ -1451,9 +1434,9 @@ MatmulJudgeDtypeKernel(const Context& ctx,
                        DenseTensor* out,
                        bool transpose_x,
                        bool transpose_y) {
-  bool try_cublasLt = MatMulInt8Function<Context>(
+  bool try_matmul_int8 = MatMulInt8Function<Context>(
       ctx, x, y, x_dims, y_dims, out, transpose_x, transpose_y);
-  if (try_cublasLt) {
+  if (try_matmul_int8) {
     return;
   }
   auto x_tmp = phi::Cast<T, Context>(ctx, x, phi::DataType::FLOAT32);
@@ -1501,118 +1484,6 @@ void MatmulKernel(const Context& ctx,
       ctx, x, y, x_dims, y_dims, out, transpose_x, transpose_y);
 }
 
-// template <typename T, typename Context>
-// void MatmulWithFlattenInt8Kernel(const Context& dev_ctx,
-//                                  const DenseTensor& x,
-//                                  const DenseTensor& y,
-//                                  int x_num_col_dims,
-//                                  int y_num_col_dims,
-//                                  DenseTensor* out) {
-//   PADDLE_ENFORCE_EQ(
-//       x.dtype(),
-//       DataType::INT8,
-//       phi::errors::InvalidArgument(
-//           "The type of input(x) used in int8 matmul_with_flatten must be "
-//           "(%s) "
-//           "does not match the "
-//           "type of data (%s) currently contained in the container.",
-//           phi::CppTypeToDataType<int8_t>::Type(),
-//           x.dtype()));
-//   PADDLE_ENFORCE_EQ(
-//       y.dtype(),
-//       DataType::INT8,
-//       phi::errors::InvalidArgument(
-//           "The type of input(y) used in int8 matmul_with_flatten must be "
-//           "(%s) "
-//           "does not match the "
-//           "type of data (%s) currently contained in the container.",
-//           phi::CppTypeToDataType<int8_t>::Type(),
-//           y.dtype()));
-
-//   const DenseTensor x_matrix =
-//       x.dims().size() > 2 ? phi::ReshapeToMatrix(x, x_num_col_dims) : x;
-//   const DenseTensor y_matrix =
-//       y.dims().size() > 2 ? phi::ReshapeToMatrix(y, y_num_col_dims) : y;
-
-//   PADDLE_ENFORCE_EQ(
-//       x_matrix.dims()[1],
-//       y_matrix.dims()[0],
-//       phi::errors::InvalidArgument(
-//           "X's numbers of columns must be equal to Y's numbers of rows."
-//           "But received X has [%d] columns,"
-//           "received Y has [%d] rows",
-//           x_matrix.dims()[1],
-//           y_matrix.dims()[0]));
-
-//   PADDLE_ENFORCE_EQ(
-//       (y_matrix.dims()[1] % 4 == 0 || y_matrix.dims()[1] == 1),
-//       true,
-//       phi::errors::InvalidArgument(
-//           "The dimension size N used in int8 matmul_with_flatten must be 1 "
-//           "or "
-//           "a multiple of 4 does not "
-//           "match the size (%d) currently contained in the container.",
-//           y_matrix.dims()[1]));
-//   PADDLE_ENFORCE_EQ(
-//       (x_matrix.dims()[1] % 4 == 0),
-//       true,
-//       phi::errors::InvalidArgument(
-//           "The dimension size K used in int8 matmul_with_flatten must be a "
-//           "multiple of 4 does not "
-//           "match the size (%d) currently contained in the container.",
-//           x_matrix.dims()[1]));
-
-//   dev_ctx.template Alloc<int32_t>(out);
-//   auto z_dim = out->dims();
-//   if (z_dim.size() != 2) {
-//     out->Resize({x_matrix.dims()[0], y_matrix.dims()[1]});
-//   }
-
-//   using blaslt = phi::funcs::MatmulWithCublasLt<int8_t, int32_t>;
-
-//   const int8_t* x_data = x_matrix.data<int8_t>();
-//   const int8_t* y_data = y_matrix.data<int8_t>();
-
-//   std::vector<std::int64_t> x_dims = {x_matrix.dims()[0],
-//   x_matrix.dims()[1]}; std::vector<std::int64_t> y_dims =
-//   {y_matrix.dims()[0], y_matrix.dims()[1]}; phi::funcs::MatmulPlanner
-//   matmul_planner(
-//       x_dims,
-//       y_dims,
-//       false,
-//       false,
-//       phi::CppTypeToDataType<int8_t>::Type(),
-//       funcs::MatmulFusedType::kMatmul,
-//       /* bias_data */ nullptr,
-//       /* reserve_data */ nullptr,
-//       /* use_addto */ false,
-//       /* no_exchange */ true);
-
-//   blaslt::Run(dev_ctx,
-//               x_data,
-//               y_data,
-//               dev_ctx.template Alloc<int32_t>(out),
-//               x_matrix.dims()[0],
-//               y_matrix.dims()[1],
-//               x_matrix.dims()[1],
-//               false,
-//               false,
-//               &matmul_planner);
-
-//   if (z_dim.size() != 2) {
-//     out->Resize(z_dim);
-//   }
-// }
-
-// template <>
-// void MatmulWithFlattenInt8Kernel<signed char, phi::CPUContext>(
-//     const phi::CPUContext& dev_ctx,
-//     const DenseTensor& x,
-//     const DenseTensor& y,
-//     int x_num_col_dims,
-//     int y_num_col_dims,
-//     DenseTensor* out) {}
-
 template <typename T, typename Context>
 void MatmulWithFlattenKernel(const Context& dev_ctx,
                              const DenseTensor& x,
@@ -1647,117 +1518,94 @@ void inline MatmulWithFlattenKernel<int8_t, phi::GPUContext>(
     int x_num_col_dims,
     int y_num_col_dims,
     DenseTensor* out) {
-  using T = int8_t;
-  using Context = phi::GPUContext;
-  if (std::is_same<T, int8_t>::value &&
-      std::is_same<Context, phi::GPUContext>::value) {
-    PADDLE_ENFORCE_EQ(
-        x.dtype(),
-        DataType::INT8,
-        phi::errors::InvalidArgument(
-            "The type of input(x) used in int8 matmul_with_flatten must be "
-            "(%s) "
-            "does not match the "
-            "type of data (%s) currently contained in the container.",
-            phi::CppTypeToDataType<int8_t>::Type(),
-            x.dtype()));
-    PADDLE_ENFORCE_EQ(
-        y.dtype(),
-        DataType::INT8,
-        phi::errors::InvalidArgument(
-            "The type of input(y) used in int8 matmul_with_flatten must be "
-            "(%s) "
-            "does not match the "
-            "type of data (%s) currently contained in the container.",
-            phi::CppTypeToDataType<int8_t>::Type(),
-            y.dtype()));
+  PADDLE_ENFORCE_EQ(
+      x.dtype(),
+      DataType::INT8,
+      phi::errors::InvalidArgument(
+          "The type of input(x) used in int8 mul must be (%s) "
+          "does not match the "
+          "type of data (%s) currently contained in the container.",
+          phi::CppTypeToDataType<int8_t>::Type(),
+          x.dtype()));
+  PADDLE_ENFORCE_EQ(
+      y.dtype(),
+      DataType::INT8,
+      phi::errors::InvalidArgument(
+          "The type of input(y) used in int8 mul must be (%s) "
+          "does not match the "
+          "type of data (%s) currently contained in the container.",
+          phi::CppTypeToDataType<int8_t>::Type(),
+          y.dtype()));
 
-    const DenseTensor x_matrix =
-        x.dims().size() > 2 ? phi::ReshapeToMatrix(x, x_num_col_dims) : x;
-    const DenseTensor y_matrix =
-        y.dims().size() > 2 ? phi::ReshapeToMatrix(y, y_num_col_dims) : y;
+  const DenseTensor x_matrix =
+      x.dims().size() > 2 ? phi::ReshapeToMatrix(x, x_num_col_dims) : x;
+  const DenseTensor y_matrix =
+      y.dims().size() > 2 ? phi::ReshapeToMatrix(y, y_num_col_dims) : y;
 
-    PADDLE_ENFORCE_EQ(
-        x_matrix.dims()[1],
-        y_matrix.dims()[0],
-        phi::errors::InvalidArgument(
-            "X's numbers of columns must be equal to Y's numbers of rows."
-            "But received X has [%d] columns,"
-            "received Y has [%d] rows",
-            x_matrix.dims()[1],
-            y_matrix.dims()[0]));
+  PADDLE_ENFORCE_EQ(
+      x_matrix.dims()[1],
+      y_matrix.dims()[0],
+      phi::errors::InvalidArgument(
+          "X's numbers of columns must be equal to Y's numbers of rows."
+          "But received X has [%d] columns,"
+          "received Y has [%d] rows",
+          x_matrix.dims()[1],
+          y_matrix.dims()[0]));
 
-    PADDLE_ENFORCE_EQ(
-        (y_matrix.dims()[1] % 4 == 0 || y_matrix.dims()[1] == 1),
-        true,
-        phi::errors::InvalidArgument(
-            "The dimension size N used in int8 matmul_with_flatten must be 1"
-            "or a multiple of 4 does not match the size (%d)"
-            "currently contained in the container.",
-            y_matrix.dims()[1]));
-    PADDLE_ENFORCE_EQ(
-        (x_matrix.dims()[1] % 4 == 0),
-        true,
-        phi::errors::InvalidArgument(
-            "The dimension size K used in int8 matmul_with_flatten must be a"
-            "multiple of 4 does not match the size (%d) currently"
-            "contained in the container.",
-            x_matrix.dims()[1]));
+  PADDLE_ENFORCE_EQ((y_matrix.dims()[1] % 4 == 0 || y_matrix.dims()[1] == 1),
+                    true,
+                    phi::errors::InvalidArgument(
+                        "The dimension size N used in int8 mul must be 1"
+                        "or a multiple of 4 does not match the size (%d)"
+                        "currently contained in the container.",
+                        y_matrix.dims()[1]));
+  PADDLE_ENFORCE_EQ((x_matrix.dims()[1] % 4 == 0),
+                    true,
+                    phi::errors::InvalidArgument(
+                        "The dimension size K used in int8 mul must be a"
+                        "multiple of 4 does not match the size (%d) currently"
+                        "contained in the container.",
+                        x_matrix.dims()[1]));
 
-    dev_ctx.template Alloc<int32_t>(out);
-    auto z_dim = out->dims();
-    if (z_dim.size() != 2) {
-      out->Resize({x_matrix.dims()[0], y_matrix.dims()[1]});
-    }
+  dev_ctx.template Alloc<int32_t>(out);
+  auto z_dim = out->dims();
+  if (z_dim.size() != 2) {
+    out->Resize({x_matrix.dims()[0], y_matrix.dims()[1]});
+  }
 
-    using blaslt = phi::funcs::MatmulWithCublasLt<int8_t, int32_t>;
+  using blaslt = phi::funcs::MatmulWithCublasLt<int8_t, int32_t>;
 
-    const int8_t* x_data = x_matrix.data<int8_t>();
-    const int8_t* y_data = y_matrix.data<int8_t>();
+  const int8_t* x_data = x_matrix.data<int8_t>();
+  const int8_t* y_data = y_matrix.data<int8_t>();
 
-    std::vector<std::int64_t> x_dims = {x_matrix.dims()[0], x_matrix.dims()[1]};
-    std::vector<std::int64_t> y_dims = {y_matrix.dims()[0], y_matrix.dims()[1]};
-    phi::funcs::MatmulPlanner matmul_planner(
-        x_dims,
-        y_dims,
-        false,
-        false,
-        phi::CppTypeToDataType<int8_t>::Type(),
-        funcs::MatmulFusedType::kMatmul,
-        /* bias_data */ nullptr,
-        /* reserve_data */ nullptr,
-        /* use_addto */ false,
-        /* no_exchange */ true);
+  std::vector<std::int64_t> x_dims = {x_matrix.dims()[0], x_matrix.dims()[1]};
+  std::vector<std::int64_t> y_dims = {y_matrix.dims()[0], y_matrix.dims()[1]};
+  phi::funcs::MatmulPlanner matmul_planner(
+      x_dims,
+      y_dims,
+      false,
+      false,
+      phi::CppTypeToDataType<int8_t>::Type(),
+      funcs::MatmulFusedType::kMatmul,
+      /* bias_data */ nullptr,
+      /* reserve_data */ nullptr,
+      /* use_addto */ false,
+      /* no_exchange */ true);
 
-    blaslt::Run(dev_ctx,
-                x_data,
-                y_data,
-                dev_ctx.template Alloc<int32_t>(out),
-                x_matrix.dims()[0],
-                y_matrix.dims()[1],
-                x_matrix.dims()[1],
-                false,
-                false,
-                &matmul_planner);
+  blaslt::Run(dev_ctx,
+              x_data,
+              y_data,
+              dev_ctx.template Alloc<int32_t>(out),
+              x_matrix.dims()[0],
+              y_matrix.dims()[1],
+              x_matrix.dims()[1],
+              false,
+              false,
+              &matmul_planner);
 
-    if (z_dim.size() != 2) {
-      out->Resize(z_dim);
-    }
-    return;
+  if (z_dim.size() != 2) {
+    out->Resize(z_dim);
   }
 }
-
-// template <>
-// void MatmulWithFlattenKernel<int8_t, phi::GPUContext>(
-//     const phi::GPUContext& dev_ctx,
-//     const DenseTensor& x,
-//     const DenseTensor& y,
-//     int x_num_col_dims,
-//     int y_num_col_dims,
-//     DenseTensor* out) {
-//   MatmulWithFlattenInt8Kernel<int8_t, phi::GPUContext>(
-//       dev_ctx, x, y, x_num_col_dims, y_num_col_dims, out);
-//   return;
-// }
 
 }  // namespace phi
