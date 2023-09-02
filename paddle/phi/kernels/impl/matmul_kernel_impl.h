@@ -1691,16 +1691,18 @@ void inline MatmulWithFlattenKernel<int8_t, phi::GPUContext>(
         (y_matrix.dims()[1] % 4 == 0 || y_matrix.dims()[1] == 1),
         true,
         phi::errors::InvalidArgument(
-            "The dimension size N used in int8 matmul_with_flatten must be 1
-            " "or " "a multiple of 4 does not " "match the size (%d)
-            currently contained in the container.", y_matrix.dims()[1]));
+            "The dimension size N used in int8 matmul_with_flatten must be 1"
+            "or a multiple of 4 does not match the size (%d)"
+            "currently contained in the container.",
+            y_matrix.dims()[1]));
     PADDLE_ENFORCE_EQ(
         (x_matrix.dims()[1] % 4 == 0),
         true,
         phi::errors::InvalidArgument(
-            "The dimension size K used in int8 matmul_with_flatten must be a
-            " "multiple of 4 does not " "match the size (%d) currently
-            contained in the container.", x_matrix.dims()[1]));
+            "The dimension size K used in int8 matmul_with_flatten must be a"
+            "multiple of 4 does not match the size (%d) currently"
+            "contained in the container.",
+            x_matrix.dims()[1]));
 
     dev_ctx.template Alloc<int32_t>(out);
     auto z_dim = out->dims();
@@ -1713,10 +1715,9 @@ void inline MatmulWithFlattenKernel<int8_t, phi::GPUContext>(
     const int8_t* x_data = x_matrix.data<int8_t>();
     const int8_t* y_data = y_matrix.data<int8_t>();
 
-    std::vector<std::int64_t> x_dims = {x_matrix.dims()[0],
-    x_matrix.dims()[1]}; std::vector<std::int64_t> y_dims =
-    {y_matrix.dims()[0], y_matrix.dims()[1]}; phi::funcs::MatmulPlanner
-    matmul_planner(
+    std::vector<std::int64_t> x_dims = {x_matrix.dims()[0], x_matrix.dims()[1]};
+    std::vector<std::int64_t> y_dims = {y_matrix.dims()[0], y_matrix.dims()[1]};
+    phi::funcs::MatmulPlanner matmul_planner(
         x_dims,
         y_dims,
         false,
@@ -1743,23 +1744,6 @@ void inline MatmulWithFlattenKernel<int8_t, phi::GPUContext>(
       out->Resize(z_dim);
     }
     return;
-  }
-  const DenseTensor x_matrix =
-      x.dims().size() > 2 ? phi::ReshapeToMatrix(x, x_num_col_dims) : x;
-  const DenseTensor y_matrix =
-      y.dims().size() > 2 ? phi::ReshapeToMatrix(y, y_num_col_dims) : y;
-
-  dev_ctx.template Alloc<T>(out);
-  auto z_dim = out->dims();
-  if (z_dim.size() != 2) {
-    out->Resize({x_matrix.dims()[0], y_matrix.dims()[1]});
-  }
-
-  auto blas = phi::funcs::GetBlas<Context, T>(dev_ctx);
-
-  blas.MatMul(x_matrix, y_matrix, out);
-  if (z_dim.size() != 2) {
-    out->Resize(z_dim);
   }
 }
 
