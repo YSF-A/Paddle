@@ -16,5 +16,6 @@ limitations under the License. */
 
 namespace ops = paddle::operators;
 
-PD_REGISTER_STRUCT_KERNEL(
-    fc, GPU, ALL_LAYOUT, ops::FCOpKernel, float, double, phi::dtype::float16) {}
+// PD_REGISTER_STRUCT_KERNEL(
+//     fc, GPU, ALL_LAYOUT, ops::FCOpKernel, float, double, phi::dtype::float16)
+//     {}
