@@ -221,7 +221,7 @@ void FcInferMeta(const MetaTensor& x,
                  bool use_quantizer,
                  const std::string& mkl_data_type,
                  float scale_in,
-                 float scale_weights,
+                 const std::vector<float>& scale_weights,
                  float scale_out,
                  bool force_fp32_output,
                  MetaTensor* y);

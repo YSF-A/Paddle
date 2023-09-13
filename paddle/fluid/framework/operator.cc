@@ -3079,6 +3079,7 @@ static void SetDnnAttrIntoDeviceContext(
 #endif
 }
 
+#include <iostream>
 void OperatorWithKernel::BuildPhiKernelContext(
     const RuntimeContext& ctx,
     platform::DeviceContext* dev_ctx,
@@ -3248,6 +3249,8 @@ void OperatorWithKernel::BuildPhiKernelContext(
     // attribute with Variable type has been placed into Inputs(), and
     // we can parse them from RuntimeContext.inputs.
     auto attr_iter = Attrs().find(attr_names[i]);
+
+    std::cout << attr_iter->first << " ";
     switch (attr_defs[i].type_index) {
       case phi::AttributeType::SCALAR:
         if (attr_iter != Attrs().end()) {

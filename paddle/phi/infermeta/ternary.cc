@@ -18,6 +18,7 @@ limitations under the License. */
 
 #include "paddle/phi/common/layout.h"
 #include "paddle/phi/core/ddim.h"
+#include "paddle/phi/core/infermeta_utils.h"
 #include "paddle/phi/kernels/funcs/common_shape.h"
 #include "paddle/phi/kernels/impl/box_coder.h"
 
@@ -1365,7 +1366,7 @@ void FcInferMeta(const MetaTensor& x,
                  bool use_quantizer,
                  const std::string& mkl_data_type,
                  float scale_in,
-                 float scale_weights,
+                 const std::vector<float>& scale_weights,
                  float scale_out,
                  bool force_fp32_output,
                  MetaTensor* y) {
@@ -1477,6 +1478,7 @@ void FcInferMeta(const MetaTensor& x,
 
   y->set_dims(make_ddim(output_dims));
   y->share_lod(x);
+  y->set_dtype(x.dtype());
 }
 
 }  // namespace phi
