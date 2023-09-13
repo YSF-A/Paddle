@@ -14,6 +14,7 @@
 
 #include "paddle/fluid/framework/new_executor/interpreter/data_transfer.h"
 
+#include <iostream>
 #include "paddle/fluid/framework/convert_utils.h"
 #include "paddle/fluid/framework/data_transform.h"
 #include "paddle/fluid/framework/new_executor/interpreter/interpreter_util.h"
@@ -670,6 +671,14 @@ void ApplyDataTransform(const OpKernelType& expected_kernel_key,
                                  op_base));
     const auto& input_names = op_with_kernel->PhiKernelSignature()->input_names;
     const auto& input_defs = phi_kernel->args_def().input_defs();
+
+    for (size_t i = 0; i < input_names.size(); ++i) {
+      std::cout << input_names[i] << std::endl;
+    }
+    // for (size_t i = 0; i < input_defs.size(); ++i) {
+    //   std::cout << input_defs[i] << std::endl;
+    // }
+
     PADDLE_ENFORCE_EQ(input_names.size(),
                       input_defs.size(),
                       platform::errors::InvalidArgument(
