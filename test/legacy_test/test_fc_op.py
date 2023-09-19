@@ -45,20 +45,20 @@ def fc_refer(matrix, with_bias, with_relu=False):
 
 
 class MatrixGenerate:
-    def __init__(self, mb, ic, oc, h, w, bias_dims=2):
-        self.input = np.random.random((mb, ic, h, w)).astype("float32")
-        self.weights = np.random.random((ic * h * w, oc)).astype("float32")
+    def __init__(self, mb, ic, oc, h, w, bias_dims=2, dtype="float32", w_dtype="float32"):
+        self.input = np.random.random((mb, ic, h, w)).astype(dtype)
+        self.weights = np.random.random((ic * h * w, oc)).astype(w_dtype)
         if bias_dims == 2:
-            self.bias = np.random.random((1, oc)).astype("float32")
+            self.bias = np.random.random((1, oc)).astype(dtype)
         else:
-            self.bias = np.random.random(oc).astype("float32")
+            self.bias = np.random.random(oc).astype(dtype)
 
 
 class TestFCOp(OpTest):
     def config(self):
         self.with_bias = True
         self.with_relu = True
-        self.matrix = MatrixGenerate(1, 10, 15, 3, 3, 2)
+        self.matrix = MatrixGenerate(1, 10, 15, 3, 3, 2, "float32", "float32")
 
     def setUp(self):
         self.op_type = "fc"
