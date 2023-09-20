@@ -21,7 +21,7 @@ limitations under the License. */
 
 #include "paddle/phi/backends/gpu/gpu_launch_config.h"
 #include "paddle/phi/core/dense_tensor.h"
-#include "paddle/phi/kernels/impl/matmul_kernel_impl.h"
+// #include "paddle/phi/kernels/impl/matmul_kernel_impl.h"
 
 namespace phi {
 namespace funcs {
