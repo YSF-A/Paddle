@@ -1,6 +1,7 @@
 #pragma once
 #include "paddle/phi/core/dense_tensor.h"
 #include "paddle/phi/kernels/funcs/fc_functor.h"
+#include "stdio.h"
 
 namespace phi {
 
@@ -56,10 +57,24 @@ void FcKernel(const Context& dev_ctx,
   int M = phi::product(out_dims) / w_dims1;
 
   const T* input_data = x.data<T>();
-  const T* w_data = w.data<T>();
   auto* output_data = dev_ctx.template Alloc<T>(y, y->numel() * sizeof(T));
   auto bias_data = bias ? bias.get_ptr()->data<T>() : NULL;
 
+  if (use_quantizer) {
+    const int8_t* w_data = w.data<int8_t>();
+    PADDLE_ENFORCE_EQ(
+        w.dtype(),
+        phi::DataType::INT8,
+        phi::errors::InvalidArgument(
+            "The weight's datatype is expected to be int8 when use quant. But "
+            "received weight's datatype is %d",
+            static_cast<int>(w.dtype())));
+    printf("use quant\n");
+    printf("%d\n", w_data[0]);
+    return;
+  }
+
+  const T* w_data = w.data<T>();
   phi::funcs::FCFunctor<Context, T> fc;
   fc(dev_ctx,
      M,
