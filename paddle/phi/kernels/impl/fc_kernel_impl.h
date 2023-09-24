@@ -22,6 +22,10 @@ void FcKernel(const Context& dev_ctx,
               const std::vector<float>& scale_weights,
               float scale_out,
               bool force_fp32_output,
+              bool is_quant,
+              int quant_round_type,
+              float quant_max_bound,
+              float quant_min_bound,
               DenseTensor* y) {
   bool with_relu = activation_type == "relu" ? true : false;
   auto w_dims = w.dims();
@@ -60,7 +64,8 @@ void FcKernel(const Context& dev_ctx,
   auto* output_data = dev_ctx.template Alloc<T>(y, y->numel() * sizeof(T));
   auto bias_data = bias ? bias.get_ptr()->data<T>() : NULL;
 
-  if (use_quantizer) {
+  if (is_quant) {
+    printf("\n use quant\n");
     const int8_t* w_data = w.data<int8_t>();
     PADDLE_ENFORCE_EQ(
         w.dtype(),
@@ -69,11 +74,26 @@ void FcKernel(const Context& dev_ctx,
             "The weight's datatype is expected to be int8 when use quant. But "
             "received weight's datatype is %d",
             static_cast<int>(w.dtype())));
-    printf("use quant\n");
-    printf("%d\n", w_data[0]);
+    phi::funcs::FCInt8Functor<Context, T> fc;
+    fc(dev_ctx,
+       M,
+       w_dims1,
+       w_dims0,
+       input_data,
+       w_data,
+       output_data,
+       scale_in,
+       scale_weights,
+       quant_round_type,
+       quant_max_bound,
+       quant_min_bound,
+       bias_data,
+       with_relu,
+       padding_weights);
     return;
   }
 
+  printf("not quant\n");
   const T* w_data = w.data<T>();
   phi::funcs::FCFunctor<Context, T> fc;
   fc(dev_ctx,
