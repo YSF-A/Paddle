@@ -9,7 +9,6 @@ KernelSignature FcOpArgumentMapping(const ArgumentMappingContext& ctx) {
                           "activation_type",
                           "use_mkldnn",
                           "padding_weights",
-                          "@ALL_KERNELS_MUST_COMPUTE_RUNTIME_SHAPE@",
                           "use_quantizer",
                           "mkldnn_data_type",
                           "Scale_in",
