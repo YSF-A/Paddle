@@ -116,7 +116,10 @@ void FCInt8Functor<DeviceContext, T>::operator()(
     float quant_min_bound,
     const T* B,
     bool relu,
-    bool padding_weights) {}
+    bool padding_weights) {
+  PADDLE_THROW(
+      phi::errors::Unimplemented("Quant Fc operator is not supported on CPU"));
+}
 
 template class FCInt8Functor<CPUContext, float>;
 template class FCInt8Functor<CPUContext, double>;

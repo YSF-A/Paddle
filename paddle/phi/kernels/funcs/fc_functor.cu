@@ -374,7 +374,6 @@ template class FCFunctor<GPUContext, float16>;
 template class FCFunctor<GPUContext, float>;
 template class FCFunctor<GPUContext, double>;
 
-// TODO(yinshangfei): ensure the DeviceContext
 template <typename DeviceContext, typename T>
 void FCInt8Functor<DeviceContext, T>::operator()(
     const DeviceContext& context,
@@ -392,13 +391,11 @@ void FCInt8Functor<DeviceContext, T>::operator()(
     const T* B,
     bool relu,
     bool padding_weights) {
-  printf("================int8 quant fc=======================\n");
   PADDLE_ENFORCE_EQ(padding_weights,
                     false,
                     errors::PermissionDenied(
                         "Weight padding in fc can not be used in GPU scope."));
 
-  // quant X
   DenseTensor quant_x_tensor, quant_y_tensor;
   quant_x_tensor.Resize(phi::make_ddim({M, K}));
   quant_y_tensor.Resize(phi::make_ddim({M, N}));
@@ -406,7 +403,6 @@ void FCInt8Functor<DeviceContext, T>::operator()(
                                  quant_x_tensor.numel() * sizeof(int8_t));
   context.template Alloc<int32_t>(&quant_y_tensor,
                                   quant_y_tensor.numel() * sizeof(int32_t));
-
   LaunchQuantKernel(X,
                     quant_x_tensor.data<int8_t>(),
                     scale_in,
@@ -417,7 +413,6 @@ void FCInt8Functor<DeviceContext, T>::operator()(
                     quant_min_bound,
                     context.stream());
 
-  // int8 gemm
   using blaslt = phi::funcs::MatmulWithCublasLt<int8_t, int32_t>;
   std::vector<int64_t> x_dims = {M, K};
   std::vector<int64_t> y_dims = {K, N};
@@ -444,7 +439,6 @@ void FCInt8Functor<DeviceContext, T>::operator()(
               false,
               &matmul_planner);
 
-  // calculate quant out scale
   DenseTensor scale_weights_dev;
   scale_weights_dev.Resize(phi::make_ddim({N}));
   context.template Alloc<float>(&scale_weights_dev,
@@ -455,8 +449,6 @@ void FCInt8Functor<DeviceContext, T>::operator()(
                   N * sizeof(float),
                   cudaMemcpyHostToDevice);
 
-  // dequant Y
-  // TODO(yinshangfei): ensure config
   phi::backends::gpu::GpuLaunchConfig config =
       phi::backends::gpu::GetGpuLaunchConfig1D(
           context, M * N, DequantKernelVecSize);

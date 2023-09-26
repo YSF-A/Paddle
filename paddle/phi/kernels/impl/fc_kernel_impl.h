@@ -5,7 +5,6 @@
 
 namespace phi {
 
-// TODO(yinshangfei): add param
 template <typename T, typename Context>
 void FcKernel(const Context& dev_ctx,
               const DenseTensor& x,
@@ -65,8 +64,6 @@ void FcKernel(const Context& dev_ctx,
   auto bias_data = bias ? bias.get_ptr()->data<T>() : NULL;
 
   if (is_quant) {
-    printf("\n use quant\n");
-    const int8_t* w_data = w.data<int8_t>();
     PADDLE_ENFORCE_EQ(
         w.dtype(),
         phi::DataType::INT8,
@@ -80,7 +77,7 @@ void FcKernel(const Context& dev_ctx,
        w_dims1,
        w_dims0,
        input_data,
-       w_data,
+       w.data<int8_t>(),
        output_data,
        scale_in,
        scale_weights,
@@ -93,7 +90,6 @@ void FcKernel(const Context& dev_ctx,
     return;
   }
 
-  printf("not quant\n");
   const T* w_data = w.data<T>();
   phi::funcs::FCFunctor<Context, T> fc;
   fc(dev_ctx,
