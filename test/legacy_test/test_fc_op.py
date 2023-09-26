@@ -224,7 +224,7 @@ class TestFCOpQuantNoBias1(TestFCOp):
         self.quant_min_bound = -127
         # self.matrix = MatrixGenerate(16, 10, 16, 4, 4, 2, "float32", "int8", self.scale_weights, self.quant_round_type, self.quant_max_bound, self.quant_min_bound)
         self.matrix = MatrixGenerate(16, 10, 16, 4, 4, 2, "float32")
-        self.scal_in = get_scale_in(self.matrix.input)
+        self.scale_in = get_scale_in(self.matrix.input)
         self.scale_weights = get_scale_weights(self.matrix.weights)
         self.matrix.weights = quant_weights(self.matrix.weights, self.scale_weights, self.quant_round_type, self.quant_max_bound, self.quant_min_bound)
 
@@ -238,7 +238,7 @@ class TestFCOpQuantBias2(TestFCOp):
         self.quant_min_bound = -127
         # self.matrix = MatrixGenerate(1, 64, 32, 3, 3, 1, "float32", "int8", self.scale_weights, self.quant_round_type, self.quant_max_bound, self.quant_min_bound)
         self.matrix = MatrixGenerate(1, 64, 32, 3, 3, 1, "float32")
-        self.scal_in = get_scale_in(self.matrix.input)
+        self.scale_in = get_scale_in(self.matrix.input)
         self.scale_weights = get_scale_weights(self.matrix.weights)
         self.matrix.weights = quant_weights(self.matrix.weights, self.scale_weights, self.quant_round_type, self.quant_max_bound, self.quant_min_bound)
 
@@ -252,7 +252,7 @@ class TestFCOpQuantWithPadding(TestFCOp):
         self.quant_min_bound = -127
         # self.matrix = MatrixGenerate(1, 4, 4, 128, 128, 2, "float32", "int8", self.scale_weights, self.quant_round_type, self.quant_max_bound, self.quant_min_bound)
         self.matrix = MatrixGenerate(1, 4, 4, 128, 128, 2, "float32")
-        self.scal_in = get_scale_in(self.matrix.input)
+        self.scale_in = get_scale_in(self.matrix.input)
         self.scale_weights = get_scale_weights(self.matrix.weights)
         self.matrix.weights = quant_weights(self.matrix.weights, self.scale_weights, self.quant_round_type, self.quant_max_bound, self.quant_min_bound)
 
