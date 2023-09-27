@@ -75,8 +75,6 @@ def fc_quant_refer(matrix, with_bias, scale_in, scale_weights, quant_round_type 
     w_i, w_o = matrix.weights.shape
 
     x_data = np.reshape(matrix.input, [in_n, in_c * in_h * in_w])
-    print('x_data')
-    print(x_data)
     quant_x_data = x_data.astype('float32')
     quant_x_data = quant_x_data * quant_max_bound * scale_in
     if quant_round_type == 0:
@@ -86,28 +84,16 @@ def fc_quant_refer(matrix, with_bias, scale_in, scale_weights, quant_round_type 
     quant_x_data[quant_x_data > quant_max_bound] = quant_max_bound
     quant_x_data[quant_x_data < quant_min_bound] = quant_min_bound
     quant_x_data = quant_x_data.astype('int8')
-    print('quant_x_data')
-    print(quant_x_data)
-    print(quant_x_data.shape)
 
     w_data = np.reshape(matrix.weights, [w_i, w_o])
-    print('w_data')
-    print(w_data)
-    print(w_data.shape)
     b_data = np.reshape(matrix.bias, [1, w_o])
     result = None
     quant_result = np.matmul(quant_x_data.astype('int32'), w_data.astype('int32'))
-    print('quant_result')
-    print(quant_result)
-    print(quant_result.shape)
     scale_out = scale_weights
     for i in range(len(scale_out)):
         scale_out[i] *= scale_in
-    # TODO
-    result = quant_result / 127 / 127 / scale_out
+    result = quant_result / quant_max_bound / quant_max_bound / scale_out
     result = result.astype(x_data.dtype)
-    print('result')
-    print(result)
 
     if with_bias:
         result = result + b_data
@@ -116,27 +102,6 @@ def fc_quant_refer(matrix, with_bias, scale_in, scale_weights, quant_round_type 
         return np.maximum(result, 0)
     else:
         return result
-
-# class MatrixGenerate:
-#     def __init__(self, mb, ic, oc, h, w, bias_dims=2, dtype="float32", w_dtype="float32", scale_weights=None, quant_round_type=1, quant_max_bound=127, quant_min_bound=-127):
-#         self.input = np.random.random((mb, ic, h, w)).astype(dtype)
-#         self.weights = np.random.random((ic * h * w, oc)).astype(dtype)
-#         print('real_res')
-#         print(np.dot(self.input.reshape(mb, ic * h * w) , self.weights))
-#         if w_dtype == 'int8':
-#             self.weights = self.weights.astype('float32')
-#             self.weights = (quant_max_bound * np.array(scale_weights) * self.weights)
-#             if quant_round_type == 0:
-#                 round_array_with_ties_to_even(self.weights)
-#             else:
-#                 round_array(self.weights)
-#             self.weights[self.weights > quant_max_bound] = quant_max_bound
-#             self.weights[self.weights < quant_min_bound] = quant_min_bound
-#             self.weights = self.weights.astype('int8')
-#         if bias_dims == 2:
-#             self.bias = np.random.random((1, oc)).astype(dtype)
-#         else:
-#             self.bias = np.random.random(oc).astype(dtype)
 
 class MatrixGenerate:
     def __init__(self, mb, ic, oc, h, w, bias_dims=2):
@@ -206,14 +171,10 @@ class TestFCOp(OpTest):
 
     def test_check_output(self):
         # self.check_output(check_dygraph=False)
-        print(self.matrix.weights)
         place = core.CUDAPlace(0)
         self.check_output_with_place(place, check_dygraph=False)
 
 
-
-
-# TODO: verify the layout constraint
 class TestFCOpQuantNoBias1(TestFCOp):
     def config(self):
         self.with_bias = False
@@ -222,7 +183,6 @@ class TestFCOpQuantNoBias1(TestFCOp):
         self.quant_round_type = 1
         self.quant_max_bound = 127
         self.quant_min_bound = -127
-        # self.matrix = MatrixGenerate(16, 10, 16, 4, 4, 2, "float32", "int8", self.scale_weights, self.quant_round_type, self.quant_max_bound, self.quant_min_bound)
         self.matrix = MatrixGenerate(16, 10, 16, 4, 4, 2)
         self.scale_in = get_scale_in(self.matrix.input)
         self.scale_weights = get_scale_weights(self.matrix.weights)
@@ -236,7 +196,6 @@ class TestFCOpQuantBias2(TestFCOp):
         self.quant_round_type = 1
         self.quant_max_bound = 127
         self.quant_min_bound = -127
-        # self.matrix = MatrixGenerate(1, 64, 32, 3, 3, 1, "float32", "int8", self.scale_weights, self.quant_round_type, self.quant_max_bound, self.quant_min_bound)
         self.matrix = MatrixGenerate(1, 64, 32, 3, 3, 1)
         self.scale_in = get_scale_in(self.matrix.input)
         self.scale_weights = get_scale_weights(self.matrix.weights)
@@ -250,7 +209,6 @@ class TestFCOpQuantWithPadding(TestFCOp):
         self.quant_round_type = 1
         self.quant_max_bound = 127
         self.quant_min_bound = -127
-        # self.matrix = MatrixGenerate(1, 4, 4, 128, 128, 2, "float32", "int8", self.scale_weights, self.quant_round_type, self.quant_max_bound, self.quant_min_bound)
         self.matrix = MatrixGenerate(1, 4, 4, 128, 128, 2)
         self.scale_in = get_scale_in(self.matrix.input)
         self.scale_weights = get_scale_weights(self.matrix.weights)
