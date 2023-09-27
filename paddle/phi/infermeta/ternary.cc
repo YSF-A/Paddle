@@ -18,7 +18,6 @@ limitations under the License. */
 
 #include "paddle/phi/common/layout.h"
 #include "paddle/phi/core/ddim.h"
-#include "paddle/phi/core/infermeta_utils.h"
 #include "paddle/phi/kernels/funcs/common_shape.h"
 #include "paddle/phi/kernels/impl/box_coder.h"
 
@@ -1382,7 +1381,7 @@ void FcInferMeta(const MetaTensor& x,
           "Weight's shape is %s.",
           w_dims.size(),
           w_dims));
-  if (bias != nullptr) {
+  if (bias) {
     auto bias_dims = bias.dims();
     auto w_dims1 = padding_weights ? w_dims[1] - 4 : w_dims[1];
 
