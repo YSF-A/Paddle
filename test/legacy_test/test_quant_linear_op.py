@@ -136,29 +136,29 @@ class TestQuantLinearOp(OpTest):
 
         if self.with_bias:
             self.inputs = {
-                'Input': self.matrix.input,
-                'W': self.matrix.weights,
-                'Bias': self.matrix.bias,
+                'x': self.matrix.input,
+                'w': self.matrix.weights,
+                'bias': self.matrix.bias,
             }
         else:
-            self.inputs = {'Input': self.matrix.input, 'W': self.matrix.weights}
+            self.inputs = {'x': self.matrix.input, 'w': self.matrix.weights}
 
         if self.with_relu:
             activation_type = "relu"
         else:
             activation_type = ""
         if hasattr(self, 'is_quant'):
-            self.attrs = {'use_mkldnn': False, 'activation_type': activation_type, 'is_quant': self.is_quant, 'quant_round_type': self.quant_round_type, 'quant_max_bound': self.quant_max_bound, 'quant_min_bound': self.quant_min_bound, 'Scale_in' : self.scale_in, 'Scale_weights' : self.scale_weights}
+            self.attrs = {'activation_type': activation_type, 'is_quant': self.is_quant, 'quant_round_type': self.quant_round_type, 'quant_max_bound': self.quant_max_bound, 'quant_min_bound': self.quant_min_bound, 'Scale_in' : self.scale_in, 'Scale_weights' : self.scale_weights}
         else:
-            self.attrs = {'use_mkldnn': False, 'activation_type': activation_type}
+            self.attrs = {'activation_type': activation_type}
 
         if hasattr(self, 'is_quant') and self.attrs['is_quant']:
             self.outputs = {
-                'Out': quant_linear_quant_refer(self.matrix, self.with_bias, self.scale_in, self.scale_weights, self.quant_round_type, self.quant_max_bound, self.quant_min_bound, self.with_relu)
+                'out': quant_linear_quant_refer(self.matrix, self.with_bias, self.scale_in, self.scale_weights, self.quant_round_type, self.quant_max_bound, self.quant_min_bound, self.with_relu)
             }
         else:
             self.outputs = {
-                'Out': quant_linear_refer(self.matrix, self.with_bias, self.with_relu)
+                'out': quant_linear_refer(self.matrix, self.with_bias, self.with_relu)
             }
 
     def test_check_output(self):

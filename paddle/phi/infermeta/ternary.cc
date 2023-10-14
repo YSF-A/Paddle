@@ -1361,15 +1361,10 @@ void QuantLinearInferMeta(const MetaTensor& x,
                           const MetaTensor& bias,
                           int in_num_col_dims,
                           const std::string& activation_type,
-                          bool use_mkldnn,
                           bool padding_weights,
-                          bool use_quantizer,
-                          const std::string& mkl_data_type,
+                          bool is_quant,
                           float scale_in,
                           const std::vector<float>& scale_weights,
-                          float scale_out,
-                          bool force_fp32_output,
-                          bool is_quant,
                           int quant_round_type,
                           float quant_max_bound,
                           float quant_min_bound,
@@ -1443,18 +1438,6 @@ void QuantLinearInferMeta(const MetaTensor& x,
                           "The attribute activation_type of fc is expected "
                           "to be \"relu\", but received %s.",
                           activation_type.c_str()));
-  }
-
-  if (use_mkldnn) {
-    PADDLE_ENFORCE_EQ(
-        in_dims.size() >= 2 && in_dims.size() <= 4,
-        true,
-        phi::errors::Unimplemented(
-            "The Input of fc is expected to be a 2-D, 3-D or 4-D tensor when "
-            "use_mkldnn is set. But received the number of Input's "
-            "dimensions is %d, Input's shape is %s.",
-            in_dims.size(),
-            in_dims));
   }
 
   std::vector<int64_t> output_dims;
