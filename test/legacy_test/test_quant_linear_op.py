@@ -148,7 +148,7 @@ class TestQuantLinearOp(OpTest):
         else:
             activation_type = ""
         if hasattr(self, 'is_quant'):
-            self.attrs = {'activation_type': activation_type, 'is_quant': self.is_quant, 'quant_round_type': self.quant_round_type, 'quant_max_bound': self.quant_max_bound, 'quant_min_bound': self.quant_min_bound, 'Scale_in' : self.scale_in, 'Scale_weights' : self.scale_weights}
+            self.attrs = {'activation_type': activation_type, 'is_quant': self.is_quant, 'quant_round_type': self.quant_round_type, 'quant_max_bound': self.quant_max_bound, 'quant_min_bound': self.quant_min_bound, 'scale_in' : self.scale_in, 'scale_weights' : self.scale_weights}
         else:
             self.attrs = {'activation_type': activation_type}
 
