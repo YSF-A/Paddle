@@ -61,6 +61,24 @@ struct FcTypeTraits<float16> {
 };
 #endif
 
+#if defined(PADDLE_CUDA_BF16)
+#include <cuda_bf16.h>
+
+template <>
+struct FcTypeTraits<bfloat16> {
+  typedef __nv_bfloat162 Type;
+};
+#else
+struct bfloat16_4 {
+  bfloat16 x, y, z, w;
+};
+
+template <>
+struct FcTypeTraits<bfloat16> {
+  typedef bfloat16_4 Type;
+};
+#endif
+
 template <typename T, bool DoRelu>
 __global__ void bias_relu_v4(const int num, const T* bias, T* data, int K) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -335,6 +353,178 @@ void AddReluKernel(gpuStream_t stream,
 }
 #endif
 
+#ifdef PADDLE_CUDA_BF16
+template <bool DoRelu, int Bfloat162VecSize>
+__global__ void bias_relu_v4_bfloat162(const int num,
+                                       const __nv_bfloat162* bias,
+                                       __nv_bfloat162* data,
+                                       int K) {
+  using LoadT = phi::AlignedVector<__nv_bfloat162, Bfloat162VecSize>;
+  LoadT data_vec;
+  LoadT bias_vec;
+  const int32_t global_thread_idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int32_t grid_stride = gridDim.x * blockDim.x;
+
+  for (int32_t linear_idx = global_thread_idx * Bfloat162VecSize;
+       linear_idx < num;
+       linear_idx += grid_stride * Bfloat162VecSize) {
+    phi::Load<__nv_bfloat162, Bfloat162VecSize>(&data[linear_idx], &data_vec);
+    const int bias_idx = linear_idx % K;
+    phi::Load<__nv_bfloat162, Bfloat162VecSize>(&bias[bias_idx], &bias_vec);
+
+#pragma unroll
+    for (int unroll_idx = 0; unroll_idx < Bfloat162VecSize; unroll_idx++) {
+      // Do biasAdd
+      data_vec[unroll_idx].x = data_vec[unroll_idx].x + bias_vec[unroll_idx].x;
+      data_vec[unroll_idx].y = data_vec[unroll_idx].y + bias_vec[unroll_idx].y;
+
+      // Do relu
+      if (DoRelu) {
+        data_vec[unroll_idx].x =
+            static_cast<int>(static_cast<float>(data_vec[unroll_idx].x) > 0) *
+            static_cast<float>(data_vec[unroll_idx].x);
+        data_vec[unroll_idx].y =
+            static_cast<int>(static_cast<float>(data_vec[unroll_idx].y) > 0) *
+            static_cast<float>(data_vec[unroll_idx].y);
+      }
+    }
+    phi::Store<__nv_bfloat162, Bfloat162VecSize>(data_vec, &data[linear_idx]);
+  }
+}
+
+template <bool DoRelu, int BlockDim>
+__global__ void InplaceAddReluKernel(const int N,
+                                     const __nv_bfloat16* bias,
+                                     __nv_bfloat16* data) {
+  int offset = blockIdx.x * N;
+  for (int i = threadIdx.x; i < N; i += BlockDim) {
+    __nv_bfloat16 temp = data[offset + i] + bias[i];
+    if (DoRelu) {
+      data[offset + i] = static_cast<int>(static_cast<float>(temp) > 0) *
+                         static_cast<float>(temp);
+    } else {
+      data[offset + i] = temp;
+    }
+  }
+}
+
+template <int Bfloat162VecSize>
+void LaunchBiasAddReluBfloat162Kernel(cudaStream_t stream,
+                                      const int32_t rows,
+                                      const int32_t cols,
+                                      bfloat16* Y,
+                                      const bfloat16* B,
+                                      bool relu) {
+  const int threads = 256;
+  const int vec_num = rows * cols / (Bfloat162VecSize * 2);
+  const int bfloat162_num = rows * cols / 2;
+  const int blocks = (vec_num + threads - 1) / threads;
+  typedef typename FcTypeTraits<bfloat16>::Type trans_type;
+  auto* bias_bfloat162_ptr = reinterpret_cast<const trans_type*>(B);
+  auto* data_bfloat162_ptr = reinterpret_cast<trans_type*>(Y);
+  if (relu) {
+    bias_relu_v4_bfloat162<true, Bfloat162VecSize>
+        <<<blocks, threads, 0, stream>>>(
+            bfloat162_num, bias_bfloat162_ptr, data_bfloat162_ptr, cols / 2);
+  } else {
+    bias_relu_v4_bfloat162<false, Bfloat162VecSize>
+        <<<blocks, threads, 0, stream>>>(
+            bfloat162_num, bias_bfloat162_ptr, data_bfloat162_ptr, cols / 2);
+  }
+}
+
+void DispatchBiasAddReluKernelBfloat162VecSize(cudaStream_t stream,
+                                               const int32_t rows,
+                                               const int32_t cols,
+                                               bfloat16* Y,
+                                               const bfloat16* B,
+                                               bool relu) {
+  if (cols % 8 == 0) {
+    LaunchBiasAddReluBfloat162Kernel<4>(stream, rows, cols, Y, B, relu);
+  } else if (cols % 4 == 0) {
+    LaunchBiasAddReluBfloat162Kernel<2>(stream, rows, cols, Y, B, relu);
+  } else {
+    LaunchBiasAddReluBfloat162Kernel<1>(stream, rows, cols, Y, B, relu);
+  }
+}
+
+template <>
+void AddReluKernel(cudaStream_t stream,
+                   const int M,
+                   const int N,
+                   bfloat16* Y,
+                   const bfloat16* B,
+                   bool relu) {
+  if (N % 2 == 0) {
+    DispatchBiasAddReluKernelBfloat162VecSize(stream, M, N, Y, B, relu);
+  } else {
+    const int threads = 256;
+    const int blocks = M;
+    auto* bf16B = reinterpret_cast<const __nv_bfloat16*>(B);
+    auto* bf16Y = reinterpret_cast<__nv_bfloat16*>(Y);
+    if (relu) {
+      InplaceAddReluKernel<true, threads>
+          <<<blocks, threads, 0, stream>>>(N, bf16B, bf16Y);
+    } else {
+      InplaceAddReluKernel<false, threads>
+          <<<blocks, threads, 0, stream>>>(N, bf16B, bf16Y);
+    }
+  }
+}
+#else
+template <bool DoRelu, int BlockDim>
+__global__ void InplaceAddReluKernel(const int N,
+                                     const bfloat16* bias,
+                                     bfloat16* data) {
+  int offset = blockIdx.x * N;
+  for (int i = threadIdx.x; i < N; i += BlockDim) {
+    bfloat16 temp;
+    temp = data[offset + i] + bias[i];
+    if (DoRelu) {
+      data[offset + i] = fmaxf(0.f, temp);
+    } else {
+      data[offset + i] = temp;
+    }
+  }
+}
+
+// TODO(YSF-A): optimize the implementation.
+template <>
+void AddReluKernel(gpuStream_t stream,
+                   const int M,
+                   const int N,
+                   bfloat16* Y,
+                   const bfloat16* B,
+                   bool relu) {
+  if (N % 4 == 0) {
+    const int threads = 256;
+    const int num = M * N / 4;
+    const int blocks = (num + threads - 1) / threads;
+    typedef typename FcTypeTraits<bfloat16>::Type trans_type;
+    auto* bias_ptr_v4 = reinterpret_cast<const trans_type*>(B);
+    auto* data_ptr_v4 = reinterpret_cast<trans_type*>(Y);
+    if (relu) {
+      bias_relu_v4<trans_type, true><<<blocks, threads, 0, stream>>>(
+          num, bias_ptr_v4, data_ptr_v4, N / 4);
+    } else {
+      bias_relu_v4<trans_type, false><<<blocks, threads, 0, stream>>>(
+          num, bias_ptr_v4, data_ptr_v4, N / 4);
+    }
+  } else {
+    const int threads = 256;
+    const int blocks = M;
+
+    if (relu) {
+      InplaceAddReluKernel<true, threads>
+          <<<blocks, threads, 0, stream>>>(N, B, Y);
+    } else {
+      InplaceAddReluKernel<false, threads>
+          <<<blocks, threads, 0, stream>>>(N, B, Y);
+    }
+  }
+}
+#endif
+
 template <typename DeviceContext, typename T>
 void FCFunctor<DeviceContext, T>::operator()(const DeviceContext& context,
                                              const int M,
@@ -452,6 +642,7 @@ void FCInt8Functor<DeviceContext, T>::operator()(
 }
 
 template class FCInt8Functor<GPUContext, float16>;
+template class FCInt8Functor<GPUContext, bfloat16>;
 template class FCInt8Functor<GPUContext, float>;
 template class FCInt8Functor<GPUContext, double>;
 }  // namespace funcs
